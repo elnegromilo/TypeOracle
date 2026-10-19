@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TipeaDBA</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Concepto: consola de administración Oracle. Mapa de zonas a la izquierda, terminal de mecanografía al centro y una instancia viva (CDB, PDB, tablespaces) que cambia con cada comando. */
+:root{
+  --bg:#EDF0F2; --surface:#FFFFFF; --surface-2:#F4F6F8; --ink:#16202A; --ink-2:#566472; --line:#D3DADF;
+  --accent:#1F4FD1; --accent-ink:#FFFFFF; --accent-soft:#E3EAFB;
+  --good:#1C7C4A; --good-soft:#DDF1E5; --bad:#C62828; --bad-soft:#FBE3E1;
+  --bar:#E6F3EA; --ghost:#667684; --star:#C98A00;
+  --kw:#1F4FD1; --fn:#0B7A85; --st:#A8480A; --nu:#7A3FD0; --ty:#9A3B73;
+  --f-display:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E141B; --surface:#161E27; --surface-2:#1B2530; --ink:#E6ECF1; --ink-2:#98A6B3; --line:#2A3643;
+    --accent:#7EA2FF; --accent-ink:#0E141B; --accent-soft:#1E2B4D;
+    --good:#4CC38A; --good-soft:#16392A; --bad:#FF7B72; --bad-soft:#43201F;
+    --bar:#1A2B24; --ghost:#8392A0; --star:#F2C14E;
+    --kw:#7EA2FF; --fn:#4FD1C5; --st:#F4B766; --nu:#C4A1FF; --ty:#F08FC0;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E141B; --surface:#161E27; --surface-2:#1B2530; --ink:#E6ECF1; --ink-2:#98A6B3; --line:#2A3643;
+  --accent:#7EA2FF; --accent-ink:#0E141B; --accent-soft:#1E2B4D;
+  --good:#4CC38A; --good-soft:#16392A; --bad:#FF7B72; --bad-soft:#43201F;
+  --bar:#1A2B24; --ghost:#8392A0; --star:#F2C14E;
+  --kw:#7EA2FF; --fn:#4FD1C5; --st:#F4B766; --nu:#C4A1FF; --ty:#F08FC0;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:15px; line-height:1.5;
+  padding-block:14px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+button{font:inherit;color:inherit}
+button:focus-visible,.code:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3,h4,p{margin:0}
+h1,h2,h3{text-wrap:balance}
+.app{max-width:1180px;margin-inline:auto}
+
+/* Encabezado */
+.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between;padding-block:6px 20px}
+.brand h1{font:800 clamp(38px,7vw,54px)/.88 var(--f-display);letter-spacing:.02em;text-transform:uppercase}
+.brand h1 b{color:var(--accent);font-weight:800}
+.brand p{margin-top:8px;color:var(--ink-2);font-size:14px}
+.rank{flex:1 1 280px;max-width:420px;min-width:0}
+.rank-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.rank-name{font:700 24px/1 var(--f-display);letter-spacing:.03em;text-transform:uppercase}
+.rank-xp{font:500 13px var(--f-mono);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.meter{height:6px;background:var(--line);border-radius:3px;margin-top:8px;overflow:hidden}
+.meter>i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s ease}
+.rank-sub{margin-top:6px;font-size:12.5px;color:var(--ink-2)}
+
+/* Estructura */
+.layout{display:grid;grid-template-columns:276px minmax(0,1fr);gap:20px;align-items:start}
+.mapbtn{display:none;width:100%;margin-bottom:14px;padding:10px 14px;border:1px solid var(--line);background:var(--surface);border-radius:8px;text-align:left;cursor:pointer;font-weight:500}
+.side{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 8px 8px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.zone+.zone{margin-top:12px}
+.zone h3{display:flex;justify-content:space-between;gap:8px;padding:4px 10px 6px;font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.zone ol{list-style:none;margin:0;padding:0}
+.lv{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:6px;width:100%;min-height:40px;padding:6px 10px;border:0;background:transparent;text-align:left;border-radius:6px;cursor:pointer}
+.lv:hover:not(:disabled){background:var(--surface-2)}
+.lv .n{font:500 12px var(--f-mono);color:var(--ink-2)}
+.lv .t{font-size:13.5px;line-height:1.3}
+.lv .s{font-size:12px;letter-spacing:1px;color:var(--line);white-space:nowrap}
+.lv .s .on{color:var(--star)}
+.lv.cur{background:var(--accent-soft)}
+.lv.cur .n{color:var(--accent)}
+.lv:disabled{opacity:.42;cursor:not-allowed}
+.side-foot{margin-top:14px;padding:10px 10px 4px;border-top:1px solid var(--line)}
+.linkbtn{border:0;background:none;padding:4px 0;color:var(--ink-2);font-size:12.5px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.linkbtn.warn{color:var(--bad)}
+
+main{display:grid;gap:16px;min-width:0}
+.row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0}
+.pad{padding:18px}
+.eyebrow{font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.card h2{font:800 clamp(26px,4vw,34px)/1 var(--f-display);letter-spacing:.02em;text-transform:uppercase;margin-top:6px}
+.mission p.m{margin-top:12px;font-size:16px;max-width:60ch}
+.hintrow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface-2);padding:8px 14px;border-radius:7px;cursor:pointer;font-weight:500;font-size:14px;min-height:38px}
+.btn:hover:not(:disabled){border-color:var(--ink-2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover:not(:disabled){filter:brightness(1.08);border-color:var(--accent)}
+.hint{margin-top:12px;padding:10px 12px;border-radius:7px;background:var(--accent-soft);font-size:14px;max-width:60ch}
+.hint b{font-weight:600}
+
+/* Instancia viva */
+.world .pad{padding:14px 16px 16px}
+.stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:10px 0 6px}
+.stg{font:600 10px/1.2 var(--f-mono);letter-spacing:.03em;text-align:center;padding:7px 2px;border:1px solid var(--line);border-radius:5px;color:var(--ink-2);overflow-wrap:anywhere}
+.stg.past{background:var(--accent-soft);color:var(--ink);border-color:transparent}
+.stg.now{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.sdesc{font-size:13px;color:var(--ink-2);min-height:2.7em}
+.sess{font:500 12px/1.5 var(--f-mono);margin:6px 0 12px;padding:6px 9px;background:var(--surface-2);border-radius:5px;overflow-wrap:anywhere}
+.tree{max-height:300px;overflow:auto;border-top:1px solid var(--line);padding-top:12px;display:grid;gap:12px}
+.node h4{margin:0 0 3px;font:600 12px/1.4 var(--f-mono);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{font:600 10px/1.4 var(--f-mono);padding:1px 6px;border-radius:4px;letter-spacing:.04em;border:1px solid var(--line);color:var(--ink-2);white-space:nowrap}
+.chip.rw{background:var(--good-soft);color:var(--good);border-color:transparent}
+.chip.ro{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.chip.here{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.node ul{margin:0;padding:0 0 0 14px;list-style:none;font:400 11.5px/1.65 var(--f-mono);color:var(--ink-2)}
+.node li{overflow-wrap:anywhere}
+.node li b{color:var(--ink);font-weight:500}
+.node li.sub{padding-left:14px}
+.dim{opacity:.55}
+
+/* Terminal */
+.tbar{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:9px 16px;background:var(--surface-2);border-bottom:1px solid var(--line);border-radius:10px 10px 0 0;font:500 12px var(--f-mono);color:var(--ink-2);letter-spacing:.03em}
+.code{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;padding:20px 18px 22px;min-height:132px;cursor:text}
+.prompt{font:600 17px/1.85 var(--f-mono);color:var(--accent);user-select:none}
+.line{font:500 17px/1.85 var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+.c{padding-bottom:1px}
+.c.kw{color:var(--kw);font-weight:600}.c.fn{color:var(--fn)}.c.st{color:var(--st)}.c.nu{color:var(--nu)}.c.ty{color:var(--ty)}.c.id{color:var(--ink)}.c.pu{color:var(--ink-2)}
+.c.gv{opacity:.9}
+.c.zn{border-bottom:2px solid var(--line)}
+.c.td{color:var(--ghost);font-weight:400}
+.c.dn{border-bottom-color:var(--good)}
+.c.bd{background:var(--bad-soft);color:var(--bad);border-bottom:2px solid var(--bad);font-weight:600}
+.caret{display:inline-block;width:2px;height:1.35em;margin:0 -1px;vertical-align:text-bottom;background:var(--accent);animation:blink 1s steps(2,start) infinite}
+@keyframes blink{to{visibility:hidden}}
+.cap{position:absolute;inset:0;width:100%;height:100%;opacity:0;resize:none;border:0;padding:0;font-size:16px;cursor:text;background:transparent}
+.clickhint{position:absolute;right:14px;bottom:10px;font:500 12px var(--f-mono);color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);padding:3px 9px;border-radius:5px;pointer-events:none;display:none}
+.code:not(:focus-within) .clickhint{display:block}
+.code.ok{background:var(--good-soft)}
+.prog{height:4px;background:var(--line)}
+.prog>i{display:block;height:100%;width:0;background:var(--good);transition:width .12s linear}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));border-bottom:1px solid var(--line)}
+.stat{padding:10px 16px;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat span{display:block;font:600 10.5px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.stat b{display:block;font:600 20px/1.3 var(--f-mono);font-variant-numeric:tabular-nums}
+.foot{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;justify-content:space-between;padding:14px 16px}
+.status{flex:1 1 280px;min-width:0;font-size:14px;color:var(--ink-2)}
+.status.good{color:var(--good);font-weight:500}
+.status.bad{color:var(--bad);font-weight:500}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+
+/* Salida y aprendizaje */
+.card h3.ct{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin-bottom:12px}
+.ph{padding:22px 14px;border:1px dashed var(--line);border-radius:7px;color:var(--ink-2);font-size:14px}
+pre.out{margin:0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:7px;font:400 13px/1.55 var(--f-mono);overflow-x:auto;white-space:pre;color:var(--ink)}
+.learn{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.learn li{display:grid;gap:4px}
+.learn code{justify-self:start;max-width:100%;font:500 13px var(--f-mono);padding:2px 8px;border-radius:5px;background:var(--surface-2);border:1px solid var(--line);overflow-wrap:anywhere}
+.learn span{font-size:14.5px}
+.oracle{margin-top:14px;padding:11px 13px;border-radius:7px;background:var(--bar);font-size:14px}
+.oracle b{display:block;font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--good);margin-bottom:3px}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .mapbtn{display:block}
+  .side{display:none;position:static;max-height:none}
+  .side.open{display:block}
+}
+@media (max-width:520px){
+  .code{padding:16px 12px 20px}
+  .prompt,.line{font-size:15.5px}
+  .stat{padding:8px 12px}
+}
+@media (prefers-reduced-motion:reduce){
+  .caret{animation:none}
+  .meter>i,.prog>i{transition:none}
+}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Tipea<b>DBA</b></h1>
+      <p>Administra Oracle escribiendo cada comando de SQL*Plus.</p>
+    </div>
+    <div class="rank" id="rank"></div>
+  </header>
+
+  <div class="layout">
+    <div>
+      <button class="mapbtn" id="mapbtn" type="button" aria-expanded="false"></button>
+      <aside class="side" id="side" aria-label="Mapa de misiones"></aside>
+    </div>
+
+    <main>
+      <div class="row2">
+        <section class="card mission pad" id="mission"></section>
+        <section class="card world" id="world"></section>
+      </div>
+
+      <section class="card" aria-label="Terminal">
+        <div class="tbar"><span>Consola del servidor</span><span>oracle@dbserver · ORCLCDB</span></div>
+        <div class="code" id="code">
+          <span class="prompt" id="prompt">SQL&gt;</span>
+          <div class="line" id="line"></div>
+          <textarea class="cap" id="cap" rows="1" aria-label="Escribe el comando" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+          <div class="clickhint">Haz clic aquí y escribe</div>
+        </div>
+        <div class="prog"><i id="pbar"></i></div>
+        <div class="stats" id="stats"></div>
+        <div class="foot">
+          <p class="status" id="status" aria-live="polite"></p>
+          <div class="acts">
+            <button class="btn" id="bhint" type="button">Ver pista</button>
+            <button class="btn" id="breset" type="button">Reiniciar</button>
+            <button class="btn primary" id="bnext" type="button">Siguiente misión</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="row2">
+        <section class="card pad" id="result"></section>
+        <section class="card pad" id="learn"></section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- Utilidades de salida estilo SQL*Plus ---------- */
+const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const stamp=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');
+  return DAYS[d.getDay()]+' '+MONS[d.getMonth()]+' '+String(d.getDate()).padStart(2,' ')+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds())+' '+d.getFullYear()};
+const tbl=(cols,rows,minw)=>{
+  const w=cols.map((c,j)=>Math.max(c.length,(minw&&minw[j])||0,...rows.map(r=>String(r[j]).length)));
+  const num=cols.map((c,j)=>rows.length>0&&rows.every(r=>typeof r[j]==='number'));
+  const pad=(v,j)=>num[j]?String(v).padStart(w[j]):String(v).padEnd(w[j]);
+  const L=[cols.map((c,j)=>pad(c,j)).join(' ').replace(/\s+$/,''),w.map(n=>'-'.repeat(n)).join(' ')];
+  rows.forEach(r=>L.push(r.map((v,j)=>pad(v,j)).join(' ').replace(/\s+$/,'')));
+  L.push('',rows.length+(rows.length===1?' row':' rows')+' selected.');
+  return L;
+};
+const noFooter=L=>L.slice(0,-2);
+
+/* ---------- Estado del mundo (instancia Oracle simulada) ---------- */
+const PD='/u01/oradata/ORCLCDB/pdbventas/';
+const STAGES=['SHUTDOWN','NOMOUNT','MOUNT','OPEN'];
+const STAGE_TXT={
+  SHUTDOWN:'La instancia está apagada: no hay memoria ni procesos.',
+  NOMOUNT:'Instancia iniciada: SGA y procesos listos, spfile leído.',
+  MOUNT:'Control files leídos. Los datafiles siguen cerrados.',
+  OPEN:'Datafiles y redo logs abiertos. La base está disponible.'
+};
+const baseWorld=()=>({
+  inst:'OPEN',sess:false,con:'CDB$ROOT',seq:13,saved:{},ts:null,users:[],defTemp:'TEMP',
+  pdbs:[{id:2,name:'PDB$SEED',mode:'READ ONLY'},{id:3,name:'ORCLPDB1',mode:'READ WRITE'}],
+  ctl:['/u01/oradata/ORCLCDB/control01.ctl','/u01/oradata/ORCLCDB/control02.ctl'],
+  redo:[{g:1,m:1,st:'CURRENT'},{g:2,m:1,st:'INACTIVE'},{g:3,m:1,st:'INACTIVE'}]
+});
+const baseTs=()=>[
+  {n:'SYSTEM',t:'P',f:[{p:PD+'system01.dbf',mb:270}]},
+  {n:'SYSAUX',t:'P',f:[{p:PD+'sysaux01.dbf',mb:330}]},
+  {n:'UNDOTBS1',t:'P',f:[{p:PD+'undotbs01.dbf',mb:100}]},
+  {n:'TEMP',t:'T',f:[{p:PD+'temp01.dbf',mb:64}]}
+];
+const findPdb=(w,n)=>w.pdbs.find(p=>p.name===n);
+const addTs=(w,n,t,p,mb)=>w.ts.push({n,t,f:[{p,mb}]});
+const getTs=(w,n)=>w.ts.find(x=>x.n===n);
+const showPdbs=w=>noFooter(tbl(['CON_ID','CON_NAME','OPEN MODE','RESTRICTED'],w.pdbs.map(p=>[p.id,p.name,p.mode,'NO']),[10,30,10,10]));
+
+/* ---------- Banco de misiones ---------- */
+/* El signo § separa lo que ya viene escrito de lo que debes teclear. */
+const ZONES=['Conectarse con SQL*Plus','Arrancar y apagar','Bases conectables (PDB)','Tablespaces y datafiles','Espacio temporal','Usuarios y cuotas','Control files y redo','Cierre y limpieza'];
+const lv=(z,title,mission,sql,hint,learn,oracle,fx,out,pr)=>({z,title,mission,sql,hint,learn,oracle,fx,out,pr:pr||'SQL>'});
+const ALT='Database altered.',PALT='Pluggable database altered.';
+const LEVELS=[
+  /* Zona 1 */
+  lv(0,'Entrar como SYSDBA','Estás en la terminal Linux del servidor. Entra a SQL*Plus como administrador, usando la autenticación del sistema operativo.',
+    `sqlplus §/ as sysdba`,'La barra / significa que Oracle confía en tu usuario del sistema operativo.',
+    [['sqlplus','abre el cliente de línea de comandos de Oracle.'],['/ as sysdba','entra sin contraseña con el privilegio SYSDBA, si tu usuario de Linux pertenece al grupo dba.']],
+    'Al entrar sin indicar contenedor quedas en CDB$ROOT, la raíz del CDB.',
+    w=>{w.sess=true},
+    ()=>['SQL*Plus: Release 19.0.0.0.0 - Production on '+stamp(),'Version 19.3.0.0.0','','Copyright (c) 1982, 2019, Oracle.  All rights reserved.','','','Connected to:','Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production','Version 19.3.0.0.0'],'$'),
+  lv(0,'Dónde estoy','Comprueba en qué contenedor está tu sesión.',
+    `SHOW §con_name`,'SHOW es un comando de SQL*Plus, no una sentencia SQL.',
+    [['SHOW con_name','muestra el contenedor al que está conectada tu sesión.']],
+    'Los comandos de SQL*Plus (SHOW, STARTUP, SHUTDOWN, EXIT) no llevan punto y coma. Las sentencias SQL sí.',
+    null,w=>noFooter(tbl(['CON_NAME'],[[w.con]],[30]))),
+  lv(0,'Estado de la base','Consulta el nombre de la base y su modo de apertura en la vista V$DATABASE.',
+    `SELECT name, open_mode §FROM v$database;`,'Las vistas V$ muestran el estado en vivo de la instancia.',
+    [['v$database','vista dinámica con los datos de la base, leídos del control file.']],
+    'Las vistas dinámicas V$ se alimentan de la memoria y del control file; no son tablas reales.',
+    null,()=>tbl(['NAME','OPEN_MODE'],[['ORCLCDB','READ WRITE']],[9,20])),
+  lv(0,'Listar los PDB','Lista los PDB del CDB con su estado de apertura.',
+    `SHOW §pdbs`,'Este comando también es de SQL*Plus.',
+    [['SHOW pdbs','lista PDB$SEED y cada PDB del CDB con su modo de apertura.']],
+    'PDB$SEED es la plantilla de solo lectura desde la que se clonan los PDB nuevos.',
+    null,w=>showPdbs(w)),
+  lv(0,'Estado de la instancia','Consulta el nombre y el estado de la instancia.',
+    `§SELECT instance_name, status FROM v$instance;`,'V$INSTANCE describe la memoria y los procesos, no los archivos.',
+    [['v$instance','estado de la instancia: STARTED, MOUNTED u OPEN.']],
+    'Instancia (memoria y procesos) y base de datos (archivos) son cosas distintas.',
+    null,w=>tbl(['INSTANCE_NAME','STATUS'],[['ORCLCDB',w.inst]],[16,12])),
+
+  /* Zona 2 */
+  lv(1,'Apagar la base','Apaga la base de datos: revierte las transacciones activas y desconecta a los usuarios.',
+    `SHUTDOWN §IMMEDIATE`,'IMMEDIATE no espera a que los usuarios terminen.',
+    [['SHUTDOWN IMMEDIATE','revierte las transacciones pendientes, cierra los archivos y detiene la instancia.']],
+    'Otras opciones: NORMAL espera a todos los usuarios, TRANSACTIONAL espera a las transacciones y ABORT corta de golpe y exige recuperación al arrancar.',
+    w=>{w.inst='SHUTDOWN'},()=>['Database closed.','Database dismounted.','ORACLE instance shut down.']),
+  lv(1,'Arrancar sin montar','Inicia solo la instancia, sin abrir todavía ningún archivo de la base.',
+    `STARTUP §NOMOUNT`,'NOMOUNT levanta memoria y procesos, nada más.',
+    [['STARTUP NOMOUNT','crea la instancia: lee el spfile, reserva la SGA e inicia los procesos.']],
+    'En NOMOUNT aún no se leen los control files. Aquí se ejecuta, por ejemplo, CREATE DATABASE.',
+    w=>{w.inst='NOMOUNT'},()=>['ORACLE instance started.','','Total System Global Area 1610612736 bytes','Fixed Size                  8895488 bytes','Variable Size             436207616 bytes','Database Buffers         1157627904 bytes','Redo Buffers                7880704 bytes']),
+  lv(1,'Montar la base','Monta la base de datos para que la instancia lea los control files.',
+    `ALTER DATABASE §MOUNT;`,'MOUNT es el paso que lee el control file.',
+    [['ALTER DATABASE MOUNT','lee el control file y descubre dónde están los datafiles y los redo logs.']],
+    'MOUNT es el estado para tareas de mantenimiento: renombrar datafiles, activar ARCHIVELOG o restaurar.',
+    w=>{w.inst='MOUNT'},()=>[ALT]),
+  lv(1,'Abrir la base','Abre la base de datos para que los usuarios puedan trabajar.',
+    `§ALTER DATABASE OPEN;`,'Es el último de los tres pasos de arranque.',
+    [['ALTER DATABASE OPEN','abre datafiles y redo logs; la base queda disponible.'],['STARTUP','sin opciones ejecuta los tres pasos seguidos.']],
+    'Tras abrir el CDB, los PDB quedan en MOUNTED salvo que hayas guardado su estado con SAVE STATE.',
+    w=>{w.inst='OPEN';w.pdbs.forEach(p=>{if(p.name!=='PDB$SEED')p.mode=w.saved[p.name]?'READ WRITE':'MOUNTED'})},()=>[ALT]),
+
+  /* Zona 3 */
+  lv(2,'Crear un PDB','Crea el PDB pdbventas con administrador pdbadmin (contraseña Oracle_123), copiando los archivos desde la plantilla pdbseed.',
+    `CREATE PLUGGABLE DATABASE pdbventas §ADMIN USER pdbadmin IDENTIFIED BY Oracle_123 FILE_NAME_CONVERT = ('/u01/oradata/ORCLCDB/pdbseed/', '/u01/oradata/ORCLCDB/pdbventas/');`,'FILE_NAME_CONVERT cambia la ruta de origen (pdbseed) por la ruta nueva.',
+    [['ADMIN USER ... IDENTIFIED BY','crea el administrador local del PDB.'],['FILE_NAME_CONVERT','copia los datafiles de la plantilla a la carpeta del nuevo PDB.']],
+    'Se ejecuta desde CDB$ROOT. Si usas OMF o el parámetro PDB_FILE_NAME_CONVERT puedes omitir FILE_NAME_CONVERT.',
+    w=>{w.pdbs.push({id:4,name:'PDBVENTAS',mode:'MOUNTED'});w.ts=baseTs()},()=>['Pluggable database created.']),
+  lv(2,'Ver el nuevo PDB','Lista de nuevo los PDB y comprueba el estado del que acabas de crear.',
+    `SHOW §pdbs`,'Un PDB recién creado aparece cerrado.',
+    [['MOUNTED','el PDB existe, pero está cerrado.']],null,
+    null,w=>showPdbs(w)),
+  lv(2,'Abrir el PDB','Abre pdbventas para poder usarlo.',
+    `ALTER PLUGGABLE DATABASE pdbventas §OPEN;`,'Se abre en modo READ WRITE por defecto.',
+    [['ALTER PLUGGABLE DATABASE ... OPEN','abre el PDB en modo READ WRITE.']],
+    'También existen OPEN READ ONLY y OPEN RESTRICTED.',
+    w=>{findPdb(w,'PDBVENTAS').mode='READ WRITE'},()=>[PALT]),
+  lv(2,'Guardar su estado','Haz que pdbventas se abra solo cada vez que arranque el CDB.',
+    `ALTER PLUGGABLE DATABASE pdbventas §SAVE STATE;`,'SAVE STATE recuerda el estado actual del PDB.',
+    [['SAVE STATE','guarda el estado actual del PDB y lo restaura al reiniciar el CDB.']],
+    'Está disponible desde 12.1.0.2. Antes se usaba un trigger AFTER STARTUP.',
+    w=>{w.saved.PDBVENTAS=true},()=>[PALT]),
+  lv(2,'Cambiar de contenedor','Muévete dentro de pdbventas para administrarlo.',
+    `§ALTER SESSION SET CONTAINER = pdbventas;`,'No necesitas volver a conectarte.',
+    [['ALTER SESSION SET CONTAINER','cambia el contenedor de tu sesión sin cerrarla.']],
+    'Para volver a la raíz usarás CDB$ROOT como destino.',
+    w=>{w.con='PDBVENTAS'},()=>['Session altered.']),
+
+  /* Zona 4 */
+  lv(3,'Crear un tablespace','Crea el tablespace ts_ventas con un datafile de 100 MB.',
+    `CREATE TABLESPACE ts_ventas §DATAFILE '/u01/oradata/ORCLCDB/pdbventas/ts_ventas01.dbf' SIZE 100M;`,'El tablespace es lógico; el datafile es el archivo físico.',
+    [['TABLESPACE','contenedor lógico de almacenamiento.'],['DATAFILE ... SIZE 100M','archivo físico del sistema operativo que guarda los datos.']],
+    'Un tablespace tiene uno o más datafiles, y cada tabla vive dentro de un tablespace.',
+    w=>{addTs(w,'TS_VENTAS','P',PD+'ts_ventas01.dbf',100)},()=>['Tablespace created.']),
+  lv(3,'Crecimiento automático','Crea ts_datos con 50 MB que crezca de 10 en 10 MB hasta un máximo de 1 GB.',
+    `CREATE TABLESPACE ts_datos DATAFILE '/u01/oradata/ORCLCDB/pdbventas/ts_datos01.dbf' SIZE 50M §AUTOEXTEND ON NEXT 10M MAXSIZE 1G;`,'AUTOEXTEND ON permite que el datafile crezca solo.',
+    [['AUTOEXTEND ON NEXT 10M MAXSIZE 1G','el datafile crece solo, de 10 MB en 10 MB, hasta 1 GB.']],
+    'Conviene fijar siempre un MAXSIZE para que un tablespace no llene el disco.',
+    w=>{addTs(w,'TS_DATOS','P',PD+'ts_datos01.dbf',50)},()=>['Tablespace created.']),
+  lv(3,'Añadir un datafile','Agrega un segundo datafile de 100 MB al tablespace ts_ventas.',
+    `ALTER TABLESPACE ts_ventas §ADD DATAFILE '/u01/oradata/ORCLCDB/pdbventas/ts_ventas02.dbf' SIZE 100M;`,'ADD DATAFILE suma otro archivo al mismo tablespace.',
+    [['ALTER TABLESPACE ... ADD DATAFILE','añade otro archivo; el tablespace gana espacio.']],null,
+    w=>{getTs(w,'TS_VENTAS').f.push({p:PD+'ts_ventas02.dbf',mb:100})},()=>['Tablespace altered.']),
+  lv(3,'Redimensionar','Amplía el primer datafile de ts_ventas a 200 MB.',
+    `ALTER DATABASE DATAFILE '/u01/oradata/ORCLCDB/pdbventas/ts_ventas01.dbf' §RESIZE 200M;`,'RESIZE cambia el tamaño de un datafile que ya existe.',
+    [['ALTER DATABASE DATAFILE ... RESIZE','cambia el tamaño de un datafile existente.']],
+    'Reducir un datafile solo funciona si el espacio del final está libre.',
+    w=>{getTs(w,'TS_VENTAS').f[0].mb=200},()=>[ALT]),
+  lv(3,'Listar tablespaces','Lista los tablespaces del PDB con su estado.',
+    `SELECT tablespace_name, status §FROM dba_tablespaces;`,'Las vistas DBA_ muestran el contenedor actual.',
+    [['dba_tablespaces','todos los tablespaces del contenedor actual.']],
+    'Dentro de un PDB, DBA_* muestra solo ese PDB. Desde la raíz, CDB_* muestra todos los contenedores.',
+    null,w=>tbl(['TABLESPACE_NAME','STATUS'],w.ts.map(t=>[t.n,'ONLINE']),[30,9])),
+  lv(3,'Listar datafiles','Lista cada datafile con su tamaño en MB.',
+    `§SELECT file_name, bytes/1024/1024 AS mb FROM dba_data_files;`,'Divide los bytes dos veces entre 1024 para obtener MB.',
+    [['dba_data_files','todos los datafiles de tablespaces permanentes.'],['bytes/1024/1024','convierte bytes a megabytes.']],null,
+    null,w=>tbl(['FILE_NAME','MB'],w.ts.filter(t=>t.t==='P').flatMap(t=>t.f.map(f=>[f.p,f.mb])))),
+
+  /* Zona 5 */
+  lv(4,'Tablespace temporal','Crea el tablespace temporal temp_ventas con un tempfile de 50 MB.',
+    `CREATE TEMPORARY TABLESPACE temp_ventas §TEMPFILE '/u01/oradata/ORCLCDB/pdbventas/temp_ventas01.dbf' SIZE 50M;`,'Un tablespace temporal usa TEMPFILE, no DATAFILE.',
+    [['TEMPORARY TABLESPACE','guarda datos de ordenamientos y uniones grandes; se vacían al terminar la sesión.'],['TEMPFILE','archivo de un tablespace temporal; no se respalda.']],
+    'Los tempfiles no necesitan respaldo: Oracle los recrea al abrir la base.',
+    w=>{addTs(w,'TEMP_VENTAS','T',PD+'temp_ventas01.dbf',50)},()=>['Tablespace created.']),
+  lv(4,'Temporal por defecto','Haz que temp_ventas sea el tablespace temporal por defecto.',
+    `ALTER DATABASE DEFAULT TEMPORARY TABLESPACE §temp_ventas;`,'Los usuarios nuevos usarán este tablespace si no se indica otro.',
+    [['DEFAULT TEMPORARY TABLESPACE','define el temporal que se asigna a los usuarios nuevos.']],null,
+    w=>{w.defTemp='TEMP_VENTAS'},()=>[ALT]),
+  lv(4,'Más espacio temporal','Agrega un segundo tempfile de 50 MB a temp_ventas.',
+    `ALTER TABLESPACE temp_ventas §ADD TEMPFILE '/u01/oradata/ORCLCDB/pdbventas/temp_ventas02.dbf' SIZE 50M;`,'Para temporales se usa ADD TEMPFILE.',
+    [['ADD TEMPFILE','añade otro tempfile al tablespace temporal.']],null,
+    w=>{getTs(w,'TEMP_VENTAS').f.push({p:PD+'temp_ventas02.dbf',mb:50})},()=>['Tablespace altered.']),
+  lv(4,'Listar tempfiles','Lista los tempfiles y el tablespace al que pertenecen.',
+    `§SELECT file_name, tablespace_name FROM dba_temp_files;`,'Los tempfiles tienen su propia vista.',
+    [['dba_temp_files','todos los tempfiles del contenedor actual.']],null,
+    null,w=>tbl(['FILE_NAME','TABLESPACE_NAME'],w.ts.filter(t=>t.t==='T').flatMap(t=>t.f.map(f=>[f.p,t.n])))),
+
+  /* Zona 6 */
+  lv(5,'Crear un usuario','Crea el usuario ana (contraseña Ana_2026) con ts_ventas por defecto, temp_ventas como temporal y 50 MB de cuota.',
+    `CREATE USER ana IDENTIFIED BY Ana_2026 §DEFAULT TABLESPACE ts_ventas TEMPORARY TABLESPACE temp_ventas QUOTA 50M ON ts_ventas;`,'QUOTA limita el espacio que el usuario puede usar en un tablespace.',
+    [['DEFAULT TABLESPACE','donde se guardan los objetos del usuario si no indica otro.'],['QUOTA 50M ON ts_ventas','espacio máximo que puede ocupar en ese tablespace.']],
+    'Sin cuota, un usuario no puede crear tablas en un tablespace aunque sea el suyo por defecto.',
+    w=>{w.users.push('ANA')},()=>['User created.']),
+  lv(5,'Dar permisos','Permite a ana conectarse y crear tablas.',
+    `GRANT CREATE SESSION, CREATE TABLE §TO ana;`,'Sin CREATE SESSION el usuario no puede entrar.',
+    [['GRANT ... TO ana','concede privilegios de sistema al usuario.']],null,
+    null,()=>['Grant succeeded.']),
+  lv(5,'Cuota ilimitada','Quita el límite de espacio de ana en ts_ventas.',
+    `§ALTER USER ana QUOTA UNLIMITED ON ts_ventas;`,'UNLIMITED reemplaza la cuota de 50 MB.',
+    [['QUOTA UNLIMITED','sin límite de espacio en ese tablespace.']],null,
+    null,()=>['User altered.']),
+
+  /* Zona 7 */
+  lv(6,'Volver a la raíz','Regresa al contenedor raíz: los control files y los redo logs se administran desde ahí.',
+    `ALTER SESSION SET CONTAINER = §CDB$ROOT;`,'La raíz se llama CDB$ROOT.',
+    [['CDB$ROOT','contenedor raíz del CDB.']],
+    'Control files, redo logs y undo del CDB pertenecen a toda la instancia, no a un PDB.',
+    w=>{w.con='CDB$ROOT'},()=>['Session altered.']),
+  lv(6,'Ver los control files','Consulta dónde están los control files.',
+    `SELECT name §FROM v$controlfile;`,'V$CONTROLFILE lista los archivos en uso.',
+    [['v$controlfile','lista los control files que la instancia tiene abiertos.']],
+    'El control file guarda el nombre de la base, la ubicación de datafiles y redo logs y el último checkpoint. Sin él, la base no monta.',
+    null,w=>tbl(['NAME'],w.ctl.map(x=>[x]))),
+  lv(6,'Respaldo a texto','Genera un script SQL que permita recrear el control file.',
+    `ALTER DATABASE BACKUP CONTROLFILE §TO TRACE;`,'TO TRACE crea un script, no una copia binaria.',
+    [['BACKUP CONTROLFILE TO TRACE','genera un script CREATE CONTROLFILE en el directorio de trazas.']],null,
+    null,()=>[ALT]),
+  lv(6,'Respaldo binario','Copia el control file a /u01/backup/control_backup.ctl.',
+    `ALTER DATABASE BACKUP CONTROLFILE §TO '/u01/backup/control_backup.ctl';`,'La ruta de destino va entre comillas simples.',
+    [["BACKUP CONTROLFILE TO '...'",'crea una copia binaria del control file actual.']],null,
+    null,()=>[ALT]),
+  lv(6,'Multiplexar','Programa un segundo control file en otro disco (/u02) para el próximo arranque.',
+    `ALTER SYSTEM SET control_files = §'/u01/oradata/ORCLCDB/control01.ctl', '/u02/oradata/ORCLCDB/control02.ctl' SCOPE = SPFILE;`,'SCOPE = SPFILE guarda el cambio sin aplicarlo ahora.',
+    [['control_files','lista de rutas: Oracle mantiene todas sincronizadas.'],['SCOPE = SPFILE','aplica el cambio en el próximo arranque.']],
+    'Antes de reiniciar debes copiar el archivo a la nueva ruta con la base apagada. Dos o más copias en discos distintos evitan perder la base.',
+    null,()=>['System altered.']),
+  lv(6,'Ver los redo logs','Consulta los grupos de redo log con su número de miembros y su estado.',
+    `SELECT group#, members, status §FROM v$log;`,'CURRENT es el grupo donde Oracle escribe ahora.',
+    [['v$log','grupos de redo log, su número de miembros y su estado.']],
+    'Los redo logs registran todos los cambios y permiten recuperar la base tras una caída.',
+    null,w=>tbl(['GROUP#','MEMBERS','STATUS'],w.redo.map(r=>[r.g,r.m,r.st]),[0,0,16])),
+  lv(6,'Cambiar de log','Fuerza el cambio al siguiente grupo de redo log.',
+    `ALTER SYSTEM §SWITCH LOGFILE;`,'El grupo anterior pasa a ACTIVE hasta el checkpoint.',
+    [['SWITCH LOGFILE','cierra el grupo actual y empieza a escribir en el siguiente.']],null,
+    w=>{const i=w.redo.findIndex(r=>r.st==='CURRENT');w.redo[i].st='ACTIVE';w.redo[(i+1)%w.redo.length].st='CURRENT';w.seq++},()=>['System altered.']),
+  lv(6,'Nuevo grupo de redo','Agrega el grupo 4 con un archivo de 200 MB.',
+    `ALTER DATABASE ADD LOGFILE GROUP 4 §('/u01/oradata/ORCLCDB/redo04.log') SIZE 200M;`,'El archivo va entre paréntesis y comillas.',
+    [['ADD LOGFILE GROUP 4','crea un nuevo grupo de redo log.']],
+    'Más grupos dan margen para que el archivado termine antes de reutilizar un log.',
+    w=>{w.redo.push({g:4,m:1,st:'UNUSED'})},()=>[ALT]),
+
+  /* Zona 8 */
+  lv(7,'Modo de archivado','Consulta si la base archiva sus redo logs.',
+    `§ARCHIVE LOG LIST`,'Es un comando de SQL*Plus, sin punto y coma.',
+    [['ARCHIVE LOG LIST','muestra el modo de log y las secuencias.']],
+    'En NOARCHIVELOG no puedes hacer respaldos en caliente ni recuperar a un punto en el tiempo.',
+    null,w=>['Database log mode              No Archive Mode','Automatic archival             Disabled','Archive destination            USE_DB_RECOVERY_FILE_DEST','Oldest online log sequence     '+(w.seq-2),'Current log sequence           '+w.seq]),
+  lv(7,'Cerrar el PDB','Cierra pdbventas antes de eliminarlo.',
+    `ALTER PLUGGABLE DATABASE pdbventas §CLOSE IMMEDIATE;`,'Un PDB debe estar cerrado para poder eliminarse.',
+    [['CLOSE IMMEDIATE','cierra el PDB y revierte las transacciones pendientes.']],null,
+    w=>{findPdb(w,'PDBVENTAS').mode='MOUNTED'},()=>[PALT]),
+  lv(7,'Eliminar el PDB','Elimina pdbventas y borra sus archivos del disco.',
+    `DROP PLUGGABLE DATABASE pdbventas §INCLUDING DATAFILES;`,'INCLUDING DATAFILES borra también los archivos.',
+    [['INCLUDING DATAFILES','borra los datafiles del disco. Con KEEP DATAFILES se conservan.']],
+    'Es irreversible: haz un respaldo antes de eliminar un PDB.',
+    w=>{w.pdbs=w.pdbs.filter(p=>p.name!=='PDBVENTAS');w.ts=null;w.users=[]},()=>['Pluggable database dropped.']),
+  lv(7,'Salir','Cierra la sesión de SQL*Plus.',
+    `§EXIT`,'Vuelves al shell de Linux.',
+    [['EXIT','termina la sesión y vuelve al shell; los cambios pendientes se confirman.']],
+    'Al salir con EXIT, Oracle confirma los cambios pendientes. Con una caída de la conexión, los revierte.',
+    w=>{w.sess=false},()=>['Disconnected from Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production','Version 19.3.0.0.0'])
+];
+
+/* ---------- Resaltado de sintaxis ---------- */
+const KW=new Set('SQLPLUS AS SYSDBA SHOW CON_NAME PDBS SELECT FROM WHERE SHUTDOWN IMMEDIATE STARTUP NOMOUNT MOUNT OPEN ALTER DATABASE SESSION SET CONTAINER CREATE PLUGGABLE ADMIN USER IDENTIFIED BY FILE_NAME_CONVERT SAVE STATE TABLESPACE DATAFILE SIZE AUTOEXTEND ON NEXT MAXSIZE ADD RESIZE TEMPORARY TEMPFILE DEFAULT QUOTA UNLIMITED GRANT TO BACKUP CONTROLFILE TRACE SYSTEM SWITCH LOGFILE GROUP SCOPE SPFILE ARCHIVE LOG LIST CLOSE DROP INCLUDING DATAFILES EXIT'.split(' '));
+function classify(sql){
+  const cls=new Array(sql.length).fill('pu'),inStr=new Array(sql.length).fill(false);
+  let i=0;
+  while(i<sql.length){
+    const c=sql[i];
+    if(c==="'"){let j=i+1;while(j<sql.length&&sql[j]!=="'")j++;
+      for(let k=i;k<=Math.min(j,sql.length-1);k++){cls[k]='st';inStr[k]=true}
+      i=j+1;continue}
+    if(/[A-Za-z_]/.test(c)){let j=i;while(j<sql.length&&/[A-Za-z0-9_$#]/.test(sql[j]))j++;
+      const w=sql.slice(i,j).toUpperCase();
+      const k=KW.has(w)?'kw':/^(V\$|GV\$|DBA_|CDB_)/.test(w)?'fn':'id';
+      for(let q=i;q<j;q++)cls[q]=k;i=j;continue}
+    if(/[0-9]/.test(c)){let j=i;while(j<sql.length&&/[0-9.]/.test(sql[j]))j++;
+      if(/[KMGTkmgt]/.test(sql[j]||'')&&!/[A-Za-z0-9_]/.test(sql[j+1]||''))j++;
+      for(let q=i;q<j;q++)cls[q]='nu';i=j;continue}
+    i++;
+  }
+  return {cls,inStr};
+}
+LEVELS.forEach(L=>{
+  const p=L.sql.split('§');L.given=p[0];L.typ=p[1];L.full=p[0]+p[1];
+  const c=classify(L.full);L.cls=c.cls;L.inStr=c.inStr;
+});
+
+/* ---------- Rangos ---------- */
+const RANKS=[{n:'Operador de consola',xp:0},{n:'Auxiliar de base de datos',xp:600},{n:'DBA junior',xp:1800},{n:'DBA',xp:3600},{n:'DBA senior',xp:6000},{n:'Arquitecto de datos',xp:8500}];
+
+/* ---------- Estado ---------- */
+const KEY='tipeadba:v1';
+let progress={};
+try{const raw=localStorage.getItem(KEY);if(raw){const o=JSON.parse(raw);if(o&&typeof o==='object')progress=o}}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(progress))}catch(e){}};
+const S={i:0,typed:'',t0:0,t1:0,errors:0,keys:0,hint:false,done:false,stars:0,outLines:[],confirmReset:false};
+
+const $=id=>document.getElementById(id);
+const el={rank:$('rank'),side:$('side'),mapbtn:$('mapbtn'),mission:$('mission'),world:$('world'),code:$('code'),prompt:$('prompt'),line:$('line'),cap:$('cap'),pbar:$('pbar'),stats:$('stats'),status:$('status'),bhint:$('bhint'),breset:$('breset'),bnext:$('bnext'),result:$('result'),learn:$('learn')};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const unlocked=i=>i===0||(progress[i-1]||0)>0;
+const xpTotal=()=>Object.keys(progress).reduce((s,k)=>s+100+50*progress[k],0);
+const starTotal=()=>Object.keys(progress).reduce((s,k)=>s+progress[k],0);
+const stars=n=>[1,2,3].map(k=>`<span class="${k<=n?'on':''}">★</span>`).join('');
+const base=p=>p.split('/').pop();
+
+function replay(k){const w=baseWorld();for(let i=0;i<=k&&i<LEVELS.length;i++){const f=LEVELS[i].fx;if(f)f(w)}return w}
+const worldNow=()=>replay(S.done?S.i:S.i-1);
+
+/* ---------- Render ---------- */
+function renderRank(){
+  const xp=xpTotal();let r=0;RANKS.forEach((x,i)=>{if(xp>=x.xp)r=i});
+  const cur=RANKS[r],nx=RANKS[r+1];
+  const pct=nx?Math.round((xp-cur.xp)/(nx.xp-cur.xp)*100):100;
+  el.rank.innerHTML=`<div class="rank-row"><span class="rank-name">${esc(cur.n)}</span><span class="rank-xp">${xp} XP · ${starTotal()}/${LEVELS.length*3} ★</span></div>
+    <div class="meter"><i style="width:${pct}%"></i></div>
+    <p class="rank-sub">${nx?`Faltan ${nx.xp-xp} XP para ser ${esc(nx.n)}.`:'Rango máximo alcanzado.'}</p>`;
+}
+function renderMap(){
+  let h='';
+  ZONES.forEach((zn,z)=>{
+    const idx=LEVELS.map((L,i)=>i).filter(i=>LEVELS[i].z===z);
+    const done=idx.filter(i=>(progress[i]||0)>0).length;
+    h+=`<section class="zone"><h3><span>Zona ${z+1} · ${esc(zn)}</span><span>${done}/${idx.length}</span></h3><ol>`;
+    idx.forEach(i=>{
+      const L=LEVELS[i],ok=unlocked(i);
+      h+=`<li><button type="button" class="lv${i===S.i?' cur':''}" data-i="${i}"${ok?'':' disabled'} aria-label="Misión ${i+1}: ${esc(L.title)}${ok?'':' (bloqueada)'}">
+        <span class="n">${String(i+1).padStart(2,'0')}</span><span class="t">${esc(L.title)}</span>
+        <span class="s">${ok?stars(progress[i]||0):'—'}</span></button></li>`;
+    });
+    h+='</ol></section>';
+  });
+  h+=`<div class="side-foot"><button type="button" class="linkbtn${S.confirmReset?' warn':''}" id="resetall">${S.confirmReset?'Toca otra vez para borrar todo el progreso':'Reiniciar progreso'}</button></div>`;
+  el.side.innerHTML=h;
+  el.mapbtn.textContent=`Misiones · ${S.i+1} de ${LEVELS.length} · ${LEVELS[S.i].title}`;
+}
+function renderMission(){
+  const L=LEVELS[S.i];
+  el.mission.innerHTML=`<p class="eyebrow">Zona ${L.z+1} · ${esc(ZONES[L.z])} · Misión ${S.i+1} de ${LEVELS.length}</p>
+    <h2>${esc(L.title)}</h2><p class="m">${esc(L.mission)}</p>
+    ${S.hint?`<div class="hint"><b>Pista:</b> ${esc(L.hint)}</div>`:''}`;
+  el.bhint.disabled=S.hint||S.done;
+  el.bhint.textContent=S.hint?'Pista mostrada':'Ver pista';
+  el.prompt.textContent=L.pr;
+}
+function renderWorld(){
+  const w=worldNow(),idx=STAGES.indexOf(w.inst),open=w.inst==='OPEN';
+  const stg=STAGES.map((s,i)=>`<div class="stg${i<idx?' past':''}${i===idx?' now':''}">${s}</div>`).join('');
+  const sess=w.sess?`Sesión SYS · contenedor <b>${esc(w.con)}</b>`:'Sin sesión de SQL*Plus: estás en el shell de Linux.';
+  const here=n=>w.sess&&w.con===n?'<span class="chip here">tu sesión</span>':'';
+  let t=`<div class="node"><h4>CDB$ROOT ${here('CDB$ROOT')}</h4><ul>
+    ${w.ctl.map(c=>`<li><b>control</b> ${esc(c)}</li>`).join('')}
+    <li><b>redo</b> ${w.redo.map(r=>`G${r.g} ${r.st}`).join(' · ')}</li></ul></div>`;
+  w.pdbs.forEach(p=>{
+    const cls=p.mode==='READ WRITE'?'rw':p.mode==='READ ONLY'?'ro':'';
+    t+=`<div class="node${open?'':' dim'}"><h4>${esc(p.name)} <span class="chip ${cls}">${open?p.mode:'CERRADO'}</span> ${here(p.name)}</h4>`;
+    if(p.name==='PDBVENTAS'&&w.ts){
+      t+='<ul>';
+      w.ts.forEach(x=>{
+        t+=`<li><b>${esc(x.n)}</b> <span class="chip">${x.t==='T'?'TEMPORAL':'PERMANENTE'}</span>${x.n===w.defTemp?' <span class="chip rw">TEMP POR DEFECTO</span>':''}</li>`;
+        x.f.forEach(f=>{t+=`<li class="sub">${esc(base(f.p))} · ${f.mb} MB</li>`});
+      });
+      if(w.users.length)t+=`<li><b>usuarios</b> ${w.users.map(esc).join(', ')}</li>`;
+      t+='</ul>';
+    }
+    t+='</div>';
+  });
+  el.world.innerHTML=`<div class="pad"><p class="eyebrow">Instancia viva · ORCLCDB</p>
+    <div class="stages">${stg}</div><p class="sdesc">${STAGE_TXT[w.inst]}</p>
+    <p class="sess">${sess}</p><div class="tree">${t}</div></div>`;
+}
+function okAt(L,i,ch){const t=L.full[i];return L.inStr[i]?ch===t:ch.toLowerCase()===t.toLowerCase()}
+function renderLine(){
+  const L=LEVELS[S.i],gl=L.given.length,ty=S.typed;let h='';
+  for(let i=0;i<L.full.length;i++){
+    if(i===gl+ty.length&&!S.done)h+='<span class="caret"></span>';
+    const ch=L.full[i],e=esc(ch);
+    if(i<gl)h+=`<span class="c ${L.cls[i]} gv">${e}</span>`;
+    else{
+      const k=i-gl;
+      if(k<ty.length){
+        if(okAt(L,i,ty[k]))h+=`<span class="c ${L.cls[i]} dn zn">${e}</span>`;
+        else h+=`<span class="c bd zn">${esc(ty[k]===' '?'·':ty[k])}</span>`;
+      }else h+=`<span class="c td zn">${e}</span>`;
+    }
+  }
+  if(!S.done&&ty.length>=L.typ.length)h+='<span class="caret"></span>';
+  el.line.innerHTML=h;
+  el.code.classList.toggle('ok',S.done);
+}
+function firstWrong(L,v){const gl=L.given.length;for(let k=0;k<v.length;k++)if(!okAt(L,gl+k,v[k]))return k;return -1}
+function renderStats(){
+  const L=LEVELS[S.i];
+  const ms=S.t0?((S.done?S.t1:performance.now())-S.t0):0;
+  const ppm=ms>1500?Math.round((S.typed.length/5)/(ms/60000)):null;
+  const acc=S.keys?Math.round((S.keys-S.errors)/S.keys*100):null;
+  el.stats.innerHTML=`<div class="stat"><span>Tiempo</span><b>${(ms/1000).toFixed(1)} s</b></div>
+    <div class="stat"><span>Velocidad</span><b>${ppm===null?'—':ppm+' ppm'}</b></div>
+    <div class="stat"><span>Precisión</span><b>${acc===null?'—':acc+'%'}</b></div>
+    <div class="stat"><span>Errores</span><b>${S.errors}</b></div>`;
+  el.pbar.style.width=Math.min(100,S.typed.length/L.typ.length*100)+'%';
+}
+function renderStatus(){
+  const L=LEVELS[S.i];let cls='',txt;
+  if(S.done){
+    cls='good';
+    txt=`Comando ejecutado. ${S.errors===0?'Sin errores':S.errors+(S.errors===1?' error':' errores')} · ${S.stars} de 3 estrellas · +${100+50*S.stars} XP.`;
+    if(S.i===LEVELS.length-1)txt+=' Completaste todas las misiones.';
+  }else if(firstWrong(L,S.typed)>=0){cls='bad';txt='Revisa lo marcado en rojo y corrígelo con Retroceso.'}
+  else txt='Escribe lo que falta del comando. Las mayúsculas no importan, salvo dentro de comillas.';
+  el.status.className='status '+cls;el.status.textContent=txt;
+  const last=S.i===LEVELS.length-1;
+  el.bnext.disabled=!S.done||last;
+  el.bnext.textContent=last?'Fin del recorrido':'Siguiente misión';
+}
+function renderAfter(){
+  const L=LEVELS[S.i];
+  if(!S.done){
+    el.result.innerHTML=`<h3 class="ct"><span>Salida de SQL*Plus</span></h3><div class="ph">La salida aparece cuando termines el comando.</div>`;
+    el.learn.innerHTML=`<h3 class="ct"><span>Lo que escribiste</span></h3><div class="ph">Aquí verás qué hace cada parte del comando.</div>`;
+    return;
+  }
+  el.result.innerHTML=`<h3 class="ct"><span>Salida de SQL*Plus</span></h3><pre class="out">${esc(S.outLines.join('\n'))}</pre>`;
+  el.learn.innerHTML=`<h3 class="ct"><span>Lo que escribiste</span></h3><ul class="learn">${L.learn.map(x=>`<li><code>${esc(x[0])}</code><span>${esc(x[1])}</span></li>`).join('')}</ul>
+    ${L.oracle?`<div class="oracle"><b>En Oracle</b>${esc(L.oracle)}</div>`:''}`;
+}
+function renderAll(){renderRank();renderMap();renderMission();renderWorld();renderLine();renderStats();renderStatus();renderAfter()}
+
+/* ---------- Flujo del juego ---------- */
+function go(i,focus){
+  S.i=i;S.typed='';S.t0=0;S.t1=0;S.errors=0;S.keys=0;S.hint=false;S.done=false;S.stars=0;S.outLines=[];S.confirmReset=false;
+  el.cap.value='';el.cap.readOnly=false;
+  renderAll();
+  if(focus!==false){try{el.cap.focus({preventScroll:true})}catch(e){}}
+}
+function finish(){
+  S.done=true;S.t1=performance.now();
+  const st=S.errors===0?3:S.errors<=3?2:1;
+  S.stars=S.hint?Math.min(st,2):st;
+  if(S.stars>(progress[S.i]||0)){progress[S.i]=S.stars;save()}
+  const L=LEVELS[S.i],w=replay(S.i);
+  S.outLines=typeof L.out==='function'?L.out(w):L.out;
+  el.cap.readOnly=true;
+  renderRank();renderMap();renderMission();renderWorld();renderLine();renderStats();renderStatus();renderAfter();
+}
+function onInput(){
+  if(S.done)return;
+  const L=LEVELS[S.i],gl=L.given.length;
+  let v=el.cap.value.replace(/[\r\n]/g,'');
+  if(v.length>L.typ.length)v=v.slice(0,L.typ.length);
+  const fw=firstWrong(L,v);
+  if(fw>=0&&v.length>fw+5)v=v.slice(0,fw+5);
+  const prev=S.typed;
+  if(v.length>prev.length){
+    if(!S.t0)S.t0=performance.now();
+    for(let k=prev.length;k<v.length;k++){S.keys++;if(!okAt(L,gl+k,v[k]))S.errors++}
+  }
+  S.typed=v;
+  if(el.cap.value!==v)el.cap.value=v;
+  try{el.cap.setSelectionRange(v.length,v.length)}catch(e){}
+  if(v.length===L.typ.length&&firstWrong(L,v)<0){finish();return}
+  renderLine();renderStats();renderStatus();
+}
+el.cap.addEventListener('input',onInput);
+el.cap.addEventListener('paste',e=>e.preventDefault());
+el.cap.addEventListener('drop',e=>e.preventDefault());
+['click','mouseup','focus'].forEach(ev=>el.cap.addEventListener(ev,()=>{try{const n=el.cap.value.length;el.cap.setSelectionRange(n,n)}catch(e){}}));
+el.cap.addEventListener('keydown',e=>{
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))e.preventDefault();
+  if(e.key==='Enter'&&!S.done)e.preventDefault();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&S.done&&!el.bnext.disabled){
+    const t=e.target;
+    if(t&&t.tagName==='BUTTON'&&t!==el.bnext)return;
+    e.preventDefault();go(S.i+1);
+  }
+});
+el.bnext.addEventListener('click',()=>{if(S.done&&S.i<LEVELS.length-1)go(S.i+1)});
+el.breset.addEventListener('click',()=>go(S.i));
+el.bhint.addEventListener('click',()=>{S.hint=true;renderMission();try{el.cap.focus({preventScroll:true})}catch(e){}});
+el.side.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.id==='resetall'){
+    if(!S.confirmReset){S.confirmReset=true;renderMap();return}
+    progress={};save();go(0);return;
+  }
+  const i=+b.dataset.i;
+  if(!Number.isNaN(i)&&unlocked(i)){go(i);el.side.classList.remove('open');el.mapbtn.setAttribute('aria-expanded','false')}
+});
+el.mapbtn.addEventListener('click',()=>{const o=el.side.classList.toggle('open');el.mapbtn.setAttribute('aria-expanded',String(o))});
+setInterval(()=>{if(S.t0&&!S.done)renderStats()},100);
+
+/* Arranque: primera misión pendiente */
+let start=LEVELS.findIndex((L,i)=>!(progress[i]>0));
+if(start<0)start=LEVELS.length-1;
+go(start,false);
+})();
+</script>
+
+</body>
+</html>

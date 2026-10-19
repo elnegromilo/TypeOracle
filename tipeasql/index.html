@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TipeaSQL</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Concepto: hoja de trabajo de SQL Developer sobre papel continuo de impresora (barras verdes). Mapa de zonas a la izquierda, terminal de mecanografía al centro. */
+:root{
+  --bg:#EDF0F2; --surface:#FFFFFF; --surface-2:#F4F6F8; --ink:#16202A; --ink-2:#566472; --line:#D3DADF;
+  --accent:#1F4FD1; --accent-ink:#FFFFFF; --accent-soft:#E3EAFB;
+  --good:#1C7C4A; --good-soft:#DDF1E5; --bad:#C62828; --bad-soft:#FBE3E1;
+  --bar:#E6F3EA; --ghost:#667684; --star:#C98A00;
+  --kw:#1F4FD1; --fn:#0B7A85; --st:#A8480A; --nu:#7A3FD0; --ty:#9A3B73;
+  --f-display:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E141B; --surface:#161E27; --surface-2:#1B2530; --ink:#E6ECF1; --ink-2:#98A6B3; --line:#2A3643;
+    --accent:#7EA2FF; --accent-ink:#0E141B; --accent-soft:#1E2B4D;
+    --good:#4CC38A; --good-soft:#16392A; --bad:#FF7B72; --bad-soft:#43201F;
+    --bar:#1A2B24; --ghost:#8392A0; --star:#F2C14E;
+    --kw:#7EA2FF; --fn:#4FD1C5; --st:#F4B766; --nu:#C4A1FF; --ty:#F08FC0;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E141B; --surface:#161E27; --surface-2:#1B2530; --ink:#E6ECF1; --ink-2:#98A6B3; --line:#2A3643;
+  --accent:#7EA2FF; --accent-ink:#0E141B; --accent-soft:#1E2B4D;
+  --good:#4CC38A; --good-soft:#16392A; --bad:#FF7B72; --bad-soft:#43201F;
+  --bar:#1A2B24; --ghost:#8392A0; --star:#F2C14E;
+  --kw:#7EA2FF; --fn:#4FD1C5; --st:#F4B766; --nu:#C4A1FF; --ty:#F08FC0;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--f-body); font-size:15px; line-height:1.5;
+  padding-block:14px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+button{font:inherit;color:inherit}
+button:focus-visible,.code:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3,p{margin:0}
+h1,h2,h3{text-wrap:balance}
+.app{max-width:1180px;margin-inline:auto}
+
+/* Encabezado */
+.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between;padding-block:6px 20px}
+.brand h1{font:800 clamp(38px,7vw,54px)/.88 var(--f-display);letter-spacing:.02em;text-transform:uppercase}
+.brand h1 b{color:var(--accent);font-weight:800}
+.brand p{margin-top:8px;color:var(--ink-2);font-size:14px}
+.rank{flex:1 1 280px;max-width:420px;min-width:0}
+.rank-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.rank-name{font:700 24px/1 var(--f-display);letter-spacing:.03em;text-transform:uppercase}
+.rank-xp{font:500 13px var(--f-mono);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.meter{height:6px;background:var(--line);border-radius:3px;margin-top:8px;overflow:hidden}
+.meter>i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s ease}
+.rank-sub{margin-top:6px;font-size:12.5px;color:var(--ink-2)}
+
+/* Estructura */
+.layout{display:grid;grid-template-columns:276px minmax(0,1fr);gap:20px;align-items:start}
+.mapbtn{display:none;width:100%;margin-bottom:14px;padding:10px 14px;border:1px solid var(--line);background:var(--surface);border-radius:8px;text-align:left;cursor:pointer;font-weight:500}
+.side{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 8px 8px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.zone+.zone{margin-top:12px}
+.zone h3{display:flex;justify-content:space-between;gap:8px;padding:4px 10px 6px;font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.zone ol{list-style:none;margin:0;padding:0}
+.lv{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:6px;width:100%;min-height:40px;padding:6px 10px;border:0;background:transparent;text-align:left;border-radius:6px;cursor:pointer}
+.lv:hover:not(:disabled){background:var(--surface-2)}
+.lv .n{font:500 12px var(--f-mono);color:var(--ink-2)}
+.lv .t{font-size:13.5px;line-height:1.3}
+.lv .s{font-size:12px;letter-spacing:1px;color:var(--line);white-space:nowrap}
+.lv .s .on{color:var(--star)}
+.lv.cur{background:var(--accent-soft)}
+.lv.cur .n{color:var(--accent)}
+.lv:disabled{opacity:.42;cursor:not-allowed}
+.side-foot{margin-top:14px;padding:10px 10px 4px;border-top:1px solid var(--line)}
+.linkbtn{border:0;background:none;padding:4px 0;color:var(--ink-2);font-size:12.5px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.linkbtn.warn{color:var(--bad)}
+
+main{display:grid;gap:16px;min-width:0}
+.row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0}
+.pad{padding:18px}
+.eyebrow{font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.card h2{font:800 clamp(26px,4vw,34px)/1 var(--f-display);letter-spacing:.02em;text-transform:uppercase;margin-top:6px}
+.mission p.m{margin-top:12px;font-size:16px;max-width:60ch}
+.hintrow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface-2);padding:8px 14px;border-radius:7px;cursor:pointer;font-weight:500;font-size:14px;min-height:38px}
+.btn:hover:not(:disabled){border-color:var(--ink-2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover:not(:disabled){filter:brightness(1.08);border-color:var(--accent)}
+.hint{margin-top:12px;padding:10px 12px;border-radius:7px;background:var(--accent-soft);font-size:14px;max-width:60ch}
+.hint b{font-weight:600}
+
+/* Esquema */
+.schema .pad{padding:14px 16px 16px}
+.tabs{display:flex;gap:6px;margin:10px 0 12px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:transparent;padding:5px 11px;border-radius:6px;font:500 12px var(--f-mono);cursor:pointer;letter-spacing:.03em}
+.tab[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.cols{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.col{font:400 11.5px var(--f-mono);padding:2px 7px;border:1px solid var(--line);border-radius:5px;background:var(--surface-2);white-space:nowrap}
+.col em{font-style:normal;color:var(--ink-2)}
+.col.pk{border-color:var(--accent)}
+.col.pk::before{content:"PK ";color:var(--accent);font-weight:600}
+
+/* Terminal */
+.tbar{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:9px 16px;background:var(--surface-2);border-bottom:1px solid var(--line);border-radius:10px 10px 0 0;font:500 12px var(--f-mono);color:var(--ink-2);letter-spacing:.03em}
+.code{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;padding:20px 18px 22px;min-height:132px;cursor:text}
+.prompt{font:600 17px/1.85 var(--f-mono);color:var(--accent);user-select:none}
+.line{font:500 17px/1.85 var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+.c{padding-bottom:1px}
+.c.kw{color:var(--kw);font-weight:600}.c.fn{color:var(--fn)}.c.st{color:var(--st)}.c.nu{color:var(--nu)}.c.ty{color:var(--ty)}.c.id{color:var(--ink)}.c.pu{color:var(--ink-2)}
+.c.gv{opacity:.9}
+.c.zn{border-bottom:2px solid var(--line)}
+.c.td{color:var(--ghost);font-weight:400}
+.c.dn{border-bottom-color:var(--good)}
+.c.bd{background:var(--bad-soft);color:var(--bad);border-bottom:2px solid var(--bad);font-weight:600}
+.caret{display:inline-block;width:2px;height:1.35em;margin:0 -1px;vertical-align:text-bottom;background:var(--accent);animation:blink 1s steps(2,start) infinite}
+@keyframes blink{to{visibility:hidden}}
+.cap{position:absolute;inset:0;width:100%;height:100%;opacity:0;resize:none;border:0;padding:0;font-size:16px;cursor:text;background:transparent}
+.clickhint{position:absolute;right:14px;bottom:10px;font:500 12px var(--f-mono);color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);padding:3px 9px;border-radius:5px;pointer-events:none;display:none}
+.code:not(:focus-within) .clickhint{display:block}
+.code.ok{background:var(--good-soft)}
+.prog{height:4px;background:var(--line)}
+.prog>i{display:block;height:100%;width:0;background:var(--good);transition:width .12s linear}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));border-bottom:1px solid var(--line)}
+.stat{padding:10px 16px;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat span{display:block;font:600 10.5px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.stat b{display:block;font:600 20px/1.3 var(--f-mono);font-variant-numeric:tabular-nums}
+.foot{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;justify-content:space-between;padding:14px 16px}
+.status{flex:1 1 280px;min-width:0;font-size:14px;color:var(--ink-2)}
+.status.good{color:var(--good);font-weight:500}
+.status.bad{color:var(--bad);font-weight:500}
+.acts{display:flex;flex-wrap:wrap;gap:8px}
+
+/* Resultado y aprendizaje */
+.card h3.ct{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin-bottom:12px}
+.ph{padding:22px 14px;border:1px dashed var(--line);border-radius:7px;color:var(--ink-2);font-size:14px}
+.gridwrap{overflow-x:auto;border:1px solid var(--line);border-radius:7px}
+table.rs{border-collapse:collapse;width:100%;font:500 13px/1.4 var(--f-mono);font-variant-numeric:tabular-nums}
+.rs th{text-align:left;padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--line);color:var(--ink-2);font-weight:600;white-space:nowrap}
+.rs td{padding:7px 12px;white-space:nowrap}
+.rs tbody tr:nth-child(even) td{background:var(--bar)}
+.rs .num{text-align:right}
+.rs .nl{color:var(--ink-2);font-style:italic}
+.rcount{margin-top:10px;font:500 13px var(--f-mono);color:var(--ink-2)}
+.msg{padding:16px;border-radius:7px;background:var(--good-soft);color:var(--good);font:600 15px var(--f-mono)}
+.learn{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.learn li{display:grid;gap:4px}
+.learn code{justify-self:start;max-width:100%;font:500 13px var(--f-mono);padding:2px 8px;border-radius:5px;background:var(--surface-2);border:1px solid var(--line);overflow-wrap:anywhere}
+.learn span{font-size:14.5px}
+.oracle{margin-top:14px;padding:11px 13px;border-radius:7px;background:var(--bar);font-size:14px}
+.oracle b{display:block;font:600 11px/1.3 var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--good);margin-bottom:3px}
+
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .mapbtn{display:block}
+  .side{display:none;position:static;max-height:none}
+  .side.open{display:block}
+}
+@media (max-width:520px){
+  .code{padding:16px 12px 20px}
+  .prompt,.line{font-size:15.5px}
+  .stat{padding:8px 12px}
+}
+@media (prefers-reduced-motion:reduce){
+  .caret{animation:none}
+  .meter>i,.prog>i{transition:none}
+}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Tipea<b>SQL</b></h1>
+      <p>Aprende SQL de Oracle escribiendo cada sentencia.</p>
+    </div>
+    <div class="rank" id="rank"></div>
+  </header>
+
+  <div class="layout">
+    <div>
+      <button class="mapbtn" id="mapbtn" type="button" aria-expanded="false"></button>
+      <aside class="side" id="side" aria-label="Mapa de misiones"></aside>
+    </div>
+
+    <main>
+      <div class="row2">
+        <section class="card mission pad" id="mission"></section>
+        <section class="card schema" id="schema"></section>
+      </div>
+
+      <section class="card" aria-label="Terminal">
+        <div class="tbar"><span>Hoja de trabajo</span><span>hr@XEPDB1</span></div>
+        <div class="code" id="code">
+          <span class="prompt">SQL&gt;</span>
+          <div class="line" id="line"></div>
+          <textarea class="cap" id="cap" rows="1" aria-label="Escribe la sentencia SQL" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+          <div class="clickhint">Haz clic aquí y escribe</div>
+        </div>
+        <div class="prog"><i id="pbar"></i></div>
+        <div class="stats" id="stats"></div>
+        <div class="foot">
+          <p class="status" id="status" aria-live="polite"></p>
+          <div class="acts">
+            <button class="btn" id="bhint" type="button">Ver pista</button>
+            <button class="btn" id="breset" type="button">Reiniciar</button>
+            <button class="btn primary" id="bnext" type="button">Siguiente misión</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="row2">
+        <section class="card pad" id="result"></section>
+        <section class="card pad" id="learn"></section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------- Datos de ejemplo (esquema HR simplificado) ---------- */
+const EMP=[
+  {employee_id:101,first_name:'Lucia',last_name:'Torres',salary:4800,commission_pct:null,department_id:10,hire_date:'2019-03-15'},
+  {employee_id:102,first_name:'Mateo',last_name:'Rojas',salary:6200,commission_pct:0.1,department_id:20,hire_date:'2018-07-02'},
+  {employee_id:103,first_name:'Valeria',last_name:'Quispe',salary:9000,commission_pct:0.2,department_id:20,hire_date:'2016-11-21'},
+  {employee_id:104,first_name:'Diego',last_name:'Salazar',salary:3900,commission_pct:null,department_id:30,hire_date:'2021-01-09'},
+  {employee_id:105,first_name:'Camila',last_name:'Vega',salary:7500,commission_pct:0.15,department_id:30,hire_date:'2017-08-30'},
+  {employee_id:106,first_name:'Andres',last_name:'Paredes',salary:12000,commission_pct:null,department_id:10,hire_date:'2015-02-12'},
+  {employee_id:107,first_name:'Sofia',last_name:'Mendoza',salary:5200,commission_pct:null,department_id:30,hire_date:'2020-10-05'},
+  {employee_id:108,first_name:'Renzo',last_name:'Campos',salary:3100,commission_pct:null,department_id:null,hire_date:'2022-05-05'}
+];
+const DEPT=[
+  {department_id:10,department_name:'Administracion'},
+  {department_id:20,department_name:'Ventas'},
+  {department_id:30,department_name:'TI'},
+  {department_id:40,department_name:'Marketing'}
+];
+const SCHEMA={
+  employees:{cols:[['employee_id','NUMBER(6)',1],['first_name','VARCHAR2(20)'],['last_name','VARCHAR2(25)'],['salary','NUMBER(8,2)'],['commission_pct','NUMBER(2,2)'],['department_id','NUMBER(4)'],['hire_date','DATE']],rows:EMP},
+  departments:{cols:[['department_id','NUMBER(4)',1],['department_name','VARCHAR2(30)']],rows:DEPT}
+};
+const MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const fmtD=iso=>{const p=iso.split('-');return p[2]+'-'+MON[+p[1]-1]+'-'+p[0].slice(2)};
+const sysdate=()=>{const n=new Date();return String(n.getDate()).padStart(2,'0')+'-'+MON[n.getMonth()]+'-'+String(n.getFullYear()).slice(2)};
+const pick=(a,...k)=>a.map(o=>k.map(x=>o[x]));
+const dname=id=>{const d=DEPT.find(x=>x.department_id===id);return d?d.department_name:null};
+const R=(cols,rows)=>({cols,rows});
+const M=msg=>({msg});
+const groups=()=>{const m=new Map();EMP.forEach(e=>{const k=e.department_id;if(!m.has(k))m.set(k,[]);m.get(k).push(e)});
+  return [...m.entries()].sort((a,b)=>a[0]===null?1:b[0]===null?-1:a[0]-b[0])};
+const avg=a=>a.reduce((s,e)=>s+e.salary,0)/a.length;
+
+/* ---------- Banco de misiones ---------- */
+/* El signo § separa lo que ya viene escrito de lo que debes teclear. */
+const ZONES=['Leer datos','Filtrar con WHERE','Ordenar y limitar','Funciones de Oracle','Agrupar','Unir y anidar','Modificar datos','Crear estructuras'];
+const lv=(z,title,mission,sql,hint,learn,oracle,res)=>({z,title,mission,sql,hint,learn,oracle,res});
+const LEVELS=[
+  lv(0,'Todas las columnas','Tu jefe pide el catálogo completo de departamentos. Muéstrale todas las columnas de la tabla DEPARTMENTS.',
+    `SELECT * §FROM departments;`,'El asterisco (*) es el comodín de todas las columnas.',
+    [['SELECT *','trae todas las columnas.'],['FROM departments','nombra la tabla de donde salen los datos.'],[';','cierra la sentencia.']],null,
+    ()=>R(['DEPARTMENT_ID','DEPARTMENT_NAME'],pick(DEPT,'department_id','department_name'))),
+  lv(0,'Columnas elegidas','Solo necesitas nombres. Muestra el nombre y el apellido de todos los empleados.',
+    `SELECT §first_name, last_name FROM employees;`,'Separa las columnas con comas.',
+    [['first_name, last_name','pide solo esas columnas, separadas por comas.']],null,
+    ()=>R(['FIRST_NAME','LAST_NAME'],pick(EMP,'first_name','last_name'))),
+  lv(0,'Alias de columna','Muestra el apellido y el salario, pero renombra el salario como sueldo en el resultado.',
+    `SELECT §last_name, salary AS sueldo FROM employees;`,'AS pone un alias; así verás SUELDO en la cabecera.',
+    [['salary AS sueldo','el alias renombra la columna solo en el resultado.']],
+    'Sin comillas dobles, Oracle muestra los alias en mayúsculas (SUELDO). Con comillas dobles conservas minúsculas y espacios.',
+    ()=>R(['LAST_NAME','SUELDO'],pick(EMP,'last_name','salary'))),
+  lv(0,'Sin repetidos','Lista los códigos de departamento que usan los empleados, sin repetir ninguno.',
+    `§SELECT DISTINCT department_id FROM employees;`,'DISTINCT va justo después de SELECT.',
+    [['DISTINCT','elimina las filas repetidas del resultado.']],null,
+    ()=>R(['DEPARTMENT_ID'],[...new Set(EMP.map(e=>e.department_id))].map(x=>[x]))),
+
+  lv(1,'Mayor que','Muestra apellido y salario de los empleados que ganan más de 6000.',
+    `SELECT last_name, salary FROM employees §WHERE salary > 6000;`,'El filtro va en WHERE, después de FROM.',
+    [['WHERE salary > 6000','deja pasar solo las filas que cumplen la condición.']],null,
+    ()=>R(['LAST_NAME','SALARY'],pick(EMP.filter(e=>e.salary>6000),'last_name','salary'))),
+  lv(1,'Igual a','Muestra nombre y departamento de quienes trabajan en el departamento 20.',
+    `SELECT first_name, department_id FROM employees §WHERE department_id = 20;`,'Para igualdad se usa un solo signo =.',
+    [['department_id = 20','en SQL la igualdad usa un solo =, no ==.']],null,
+    ()=>R(['FIRST_NAME','DEPARTMENT_ID'],pick(EMP.filter(e=>e.department_id===20),'first_name','department_id'))),
+  lv(1,'Comodines con LIKE','Muestra los apellidos que terminan en la letra s minúscula.',
+    `SELECT last_name FROM employees §WHERE last_name LIKE '%s';`,'El signo % representa cualquier cantidad de caracteres.',
+    [["LIKE '%s'",'busca un patrón; % vale por cualquier cantidad de caracteres.'],['_','un guion bajo vale por exactamente un carácter.']],
+    "Los textos entre comillas simples distinguen mayúsculas de minúsculas: '%S' daría otro resultado.",
+    ()=>R(['LAST_NAME'],pick(EMP.filter(e=>e.last_name.endsWith('s')),'last_name'))),
+  lv(1,'Valores nulos','Muestra apellido y comisión de los empleados que no tienen comisión asignada.',
+    `SELECT last_name, commission_pct §FROM employees WHERE commission_pct IS NULL;`,'Con nulos no se usa =; se usa IS NULL.',
+    [['IS NULL','comprueba que no hay valor. Escribir = NULL nunca da verdadero.']],
+    "En Oracle una cadena vacía ('') también se guarda como NULL.",
+    ()=>R(['LAST_NAME','COMMISSION_PCT'],pick(EMP.filter(e=>e.commission_pct===null),'last_name','commission_pct'))),
+  lv(1,'Filtros combinados','Muestra apellido y salario de quienes ganan entre 4000 y 6000 y trabajan en los departamentos 10 o 30.',
+    `§SELECT last_name, salary FROM employees WHERE salary BETWEEN 4000 AND 6000 AND department_id IN (10, 30);`,'BETWEEN incluye los extremos; IN acepta una lista de valores.',
+    [['BETWEEN 4000 AND 6000','rango con ambos extremos incluidos.'],['IN (10, 30)','equivale a department_id = 10 OR department_id = 30.'],['AND','exige que se cumplan las dos condiciones.']],null,
+    ()=>R(['LAST_NAME','SALARY'],pick(EMP.filter(e=>e.salary>=4000&&e.salary<=6000&&[10,30].includes(e.department_id)),'last_name','salary'))),
+
+  lv(2,'Orden descendente','Muestra apellido y salario, del sueldo más alto al más bajo.',
+    `SELECT last_name, salary FROM employees §ORDER BY salary DESC;`,'ORDER BY va al final; DESC ordena de mayor a menor.',
+    [['ORDER BY salary DESC','ordena el resultado; DESC es descendente.']],null,
+    ()=>R(['LAST_NAME','SALARY'],pick([...EMP].sort((a,b)=>b.salary-a.salary),'last_name','salary'))),
+  lv(2,'Orden ascendente','Muestra apellido y fecha de ingreso, del más antiguo al más reciente.',
+    `SELECT last_name, hire_date §FROM employees ORDER BY hire_date;`,'Sin DESC, el orden es ascendente por defecto.',
+    [['ORDER BY hire_date','sin DESC el orden es ascendente (ASC), también con fechas.']],null,
+    ()=>R(['LAST_NAME','HIRE_DATE'],[...EMP].sort((a,b)=>a.hire_date<b.hire_date?-1:1).map(e=>[e.last_name,fmtD(e.hire_date)]))),
+  lv(2,'Los tres mejores','Muestra apellido y salario de los 3 empleados mejor pagados.',
+    `SELECT last_name, salary FROM employees §ORDER BY salary DESC FETCH FIRST 3 ROWS ONLY;`,'FETCH FIRST n ROWS ONLY va después de ORDER BY.',
+    [['FETCH FIRST 3 ROWS ONLY','corta el resultado a las 3 primeras filas, ya ordenadas.']],
+    'Disponible desde Oracle 12c. En versiones anteriores se usaba ROWNUM con una subconsulta.',
+    ()=>R(['LAST_NAME','SALARY'],pick([...EMP].sort((a,b)=>b.salary-a.salary).slice(0,3),'last_name','salary'))),
+  lv(2,'ROWNUM','Usa el método clásico de Oracle para traer solo las 3 primeras filas de apellido y salario.',
+    `§SELECT last_name, salary FROM employees WHERE ROWNUM <= 3;`,'ROWNUM numera las filas a medida que Oracle las devuelve.',
+    [['WHERE ROWNUM <= 3','ROWNUM es un contador de filas: 1, 2, 3...']],
+    'ROWNUM se asigna antes de ORDER BY, así que no sirve para un top real. Para eso usa FETCH FIRST.',
+    ()=>R(['LAST_NAME','SALARY'],pick(EMP.slice(0,3),'last_name','salary'))),
+
+  lv(3,'Fecha del servidor','Pide a Oracle la fecha actual del servidor.',
+    `SELECT SYSDATE §FROM dual;`,'DUAL es una tabla de una sola fila que sirve para consultas sin tabla.',
+    [['SYSDATE','devuelve la fecha y hora del servidor.'],['FROM dual','DUAL es una tabla de sistema con una sola fila.']],
+    'En Oracle todo SELECT necesita FROM. DUAL sirve para evaluar expresiones sin usar una tabla real.',
+    ()=>R(['SYSDATE'],[[sysdate()]])),
+  lv(3,'Mayúsculas','Muestra todos los apellidos en mayúsculas.',
+    `SELECT §UPPER(last_name) FROM employees;`,'UPPER recibe una columna y devuelve el texto en mayúsculas.',
+    [['UPPER(last_name)','aplica la función a cada fila.']],
+    'Otras funciones de texto: LOWER, INITCAP, SUBSTR y LENGTH.',
+    ()=>R(['UPPER(LAST_NAME)'],EMP.map(e=>[e.last_name.toUpperCase()]))),
+  lv(3,'Reemplazar nulos','Muestra apellido y comisión, pero cambia las comisiones nulas por 0.',
+    `SELECT last_name, §NVL(commission_pct, 0) FROM employees;`,'NVL(valor, reemplazo) sustituye los nulos.',
+    [['NVL(commission_pct, 0)','si el primer valor es nulo, devuelve el segundo.']],
+    'NVL es propio de Oracle. COALESCE hace lo mismo y es estándar SQL.',
+    ()=>R(['LAST_NAME','NVL(COMMISSION_PCT, 0)'],EMP.map(e=>[e.last_name,e.commission_pct===null?0:e.commission_pct]))),
+  lv(3,'Unir textos','Muestra el nombre completo (nombre, un espacio, apellido) en una sola columna llamada nombre.',
+    `SELECT §first_name || ' ' || last_name AS nombre FROM employees;`,'El operador || une textos.',
+    [["first_name || ' ' || last_name",'|| concatena textos; el espacio va entre comillas.']],
+    'La función CONCAT de Oracle solo une dos valores, por eso se usa mucho el operador ||.',
+    ()=>R(['NOMBRE'],EMP.map(e=>[e.first_name+' '+e.last_name]))),
+  lv(3,'Formato de fecha','Muestra el apellido y el año de ingreso (cuatro dígitos) con el alias anio.',
+    `§SELECT last_name, TO_CHAR(hire_date, 'YYYY') AS anio FROM employees;`,'TO_CHAR convierte una fecha a texto con el formato que indiques.',
+    [["TO_CHAR(hire_date, 'YYYY')",'convierte la fecha a texto con el formato indicado.']],
+    "Otros formatos: 'DD/MM/YYYY', 'MONTH', 'DAY' y 'HH24:MI'.",
+    ()=>R(['LAST_NAME','ANIO'],EMP.map(e=>[e.last_name,e.hire_date.slice(0,4)]))),
+
+  lv(4,'Contar filas','Cuenta cuántos empleados hay en total.',
+    `SELECT §COUNT(*) FROM employees;`,'COUNT(*) cuenta todas las filas.',
+    [['COUNT(*)','cuenta las filas del resultado.']],null,
+    ()=>R(['COUNT(*)'],[[EMP.length]])),
+  lv(4,'Promedio','Calcula el salario promedio de la empresa.',
+    `SELECT §AVG(salary) FROM employees;`,'AVG calcula el promedio de una columna.',
+    [['AVG(salary)','promedio de la columna; ignora los nulos.']],null,
+    ()=>R(['AVG(SALARY)'],[[avg(EMP)]])),
+  lv(4,'Agrupar','Cuenta cuántos empleados hay en cada departamento.',
+    `SELECT department_id, COUNT(*) FROM employees §GROUP BY department_id;`,'Toda columna sin función en el SELECT debe ir en GROUP BY.',
+    [['GROUP BY department_id','forma un grupo por cada valor distinto.'],['COUNT(*)','ahora cuenta dentro de cada grupo.']],null,
+    ()=>R(['DEPARTMENT_ID','COUNT(*)'],groups().map(g=>[g[0],g[1].length]))),
+  lv(4,'Filtrar grupos','Muestra los departamentos cuyo salario promedio supera 6000, junto con ese promedio.',
+    `§SELECT department_id, AVG(salary) FROM employees GROUP BY department_id HAVING AVG(salary) > 6000;`,'HAVING filtra grupos; WHERE filtra filas.',
+    [['HAVING AVG(salary) > 6000','filtra los grupos ya calculados.'],['WHERE vs HAVING','WHERE actúa antes de agrupar; HAVING, después.']],null,
+    ()=>R(['DEPARTMENT_ID','AVG(SALARY)'],groups().map(g=>[g[0],avg(g[1])]).filter(r=>r[1]>6000))),
+
+  lv(5,'INNER JOIN','Muestra cada apellido junto al nombre de su departamento.',
+    `SELECT e.last_name, d.department_name FROM employees e §JOIN departments d ON e.department_id = d.department_id;`,'Las letras e y d son alias de tabla; ON dice cómo se relacionan.',
+    [['employees e','la e es un alias de tabla, más corto de escribir.'],['JOIN ... ON','une filas de dos tablas cuando la condición se cumple.']],
+    'Los empleados sin departamento no aparecen con un JOIN normal.',
+    ()=>R(['LAST_NAME','DEPARTMENT_NAME'],EMP.filter(e=>e.department_id!==null).map(e=>[e.last_name,dname(e.department_id)]))),
+  lv(5,'LEFT JOIN','Lo mismo, pero incluye también a los empleados que no tienen departamento.',
+    `SELECT e.last_name, d.department_name FROM employees e §LEFT JOIN departments d ON e.department_id = d.department_id;`,'LEFT JOIN conserva todas las filas de la tabla de la izquierda.',
+    [['LEFT JOIN','conserva todas las filas de la izquierda; si no hay pareja, rellena con NULL.']],
+    'La sintaxis antigua de Oracle usaba (+) en el WHERE. Hoy se prefiere LEFT JOIN.',
+    ()=>R(['LAST_NAME','DEPARTMENT_NAME'],EMP.map(e=>[e.last_name,e.department_id===null?null:dname(e.department_id)]))),
+  lv(5,'Joins y grupos','Muestra cuántos empleados tiene cada departamento, incluso los que tienen cero.',
+    `§SELECT d.department_name, COUNT(e.employee_id) FROM departments d LEFT JOIN employees e ON d.department_id = e.department_id GROUP BY d.department_name;`,'Cuenta una columna de la tabla derecha para que dé 0 si no hay filas.',
+    [['COUNT(e.employee_id)','cuenta solo filas con valor; en un departamento vacío da 0.'],['GROUP BY d.department_name','agrupa por nombre de departamento.']],null,
+    ()=>R(['DEPARTMENT_NAME','COUNT(E.EMPLOYEE_ID)'],DEPT.map(d=>[d.department_name,EMP.filter(e=>e.department_id===d.department_id).length]))),
+  lv(5,'Subconsulta','Muestra los empleados que ganan más que el salario promedio de toda la empresa.',
+    `SELECT last_name, salary FROM employees WHERE salary > §(SELECT AVG(salary) FROM employees);`,'La subconsulta va entre paréntesis y se ejecuta primero.',
+    [['(SELECT AVG(salary) FROM employees)','la subconsulta se ejecuta primero y devuelve un valor para comparar.']],null,
+    ()=>R(['LAST_NAME','SALARY'],pick(EMP.filter(e=>e.salary>avg(EMP)),'last_name','salary'))),
+
+  lv(6,'INSERT','Registra un nuevo departamento: código 50, nombre Legal.',
+    `INSERT INTO departments §(department_id, department_name) VALUES (50, 'Legal');`,'Primero las columnas; luego VALUES, con los datos en el mismo orden.',
+    [['INSERT INTO ... VALUES','agrega una fila nueva.'],["'Legal'",'los textos van entre comillas simples.']],
+    'En Oracle los cambios DML quedan pendientes hasta que haces COMMIT. ROLLBACK los deshace.',
+    ()=>M('1 fila creada.')),
+  lv(6,'UPDATE','Sube a 5000 el salario del empleado 101.',
+    `UPDATE employees §SET salary = 5000 WHERE employee_id = 101;`,'Sin WHERE, UPDATE cambiaría todas las filas de la tabla.',
+    [['SET salary = 5000','define el nuevo valor.'],['WHERE employee_id = 101','limita el cambio a una sola fila.']],null,
+    ()=>M('1 fila actualizada.')),
+  lv(6,'DELETE','Elimina al empleado 108.',
+    `DELETE FROM employees §WHERE employee_id = 108;`,'Sin WHERE, DELETE borraría todas las filas.',
+    [['DELETE FROM ... WHERE','borra solo las filas que cumplen la condición.']],null,
+    ()=>M('1 fila suprimida.')),
+  lv(6,'COMMIT','Confirma definitivamente los cambios hechos en la sesión.',
+    `§COMMIT;`,'Hasta el COMMIT, los cambios solo los ves tú.',
+    [['COMMIT','guarda los cambios de forma permanente.'],['ROLLBACK','los descarta si aún no hiciste COMMIT.']],
+    'Un comando DDL como CREATE TABLE confirma de forma implícita todo lo pendiente.',
+    ()=>M('Confirmación terminada.')),
+
+  lv(7,'CREATE TABLE','Crea la tabla clientes: id numérico de hasta 5 dígitos como clave primaria, y nombre de texto obligatorio de hasta 50 caracteres.',
+    `CREATE TABLE clientes §(id NUMBER(5) PRIMARY KEY, nombre VARCHAR2(50) NOT NULL);`,'VARCHAR2 es el tipo de texto de Oracle; NUMBER es el numérico.',
+    [['NUMBER(5)','número de hasta 5 dígitos.'],['VARCHAR2(50)','texto de hasta 50 caracteres.'],['PRIMARY KEY / NOT NULL','identificador único; valor obligatorio.']],
+    'VARCHAR2 es el tipo de texto recomendado por Oracle. VARCHAR existe, pero Oracle lo reserva para uso futuro.',
+    ()=>M('Tabla creada.')),
+  lv(7,'ALTER TABLE','Agrega a clientes la columna email, de texto de hasta 80 caracteres.',
+    `§ALTER TABLE clientes ADD (email VARCHAR2(80));`,'ADD agrega columnas; las nuevas quedan al final.',
+    [['ALTER TABLE ... ADD','agrega una columna a una tabla que ya existe.']],
+    'Para quitar o cambiar columnas usa DROP COLUMN o MODIFY.',
+    ()=>M('Tabla modificada.')),
+  lv(7,'DROP TABLE','Elimina la tabla clientes.',
+    `§DROP TABLE clientes;`,'DROP TABLE borra la tabla y todos sus datos.',
+    [['DROP TABLE','elimina la tabla completa: estructura y filas.']],
+    'Desde Oracle 10g la tabla va a la papelera (RECYCLEBIN). Con PURGE se borra sin poder recuperarla.',
+    ()=>M('Tabla borrada.'))
+];
+
+/* ---------- Resaltado de sintaxis ---------- */
+const KW=new Set('SELECT FROM WHERE AND OR NOT IN BETWEEN LIKE IS NULL ORDER BY GROUP HAVING DESC ASC AS DISTINCT FETCH FIRST ROWS ONLY JOIN LEFT INNER ON INSERT INTO VALUES UPDATE SET DELETE COMMIT ROLLBACK CREATE TABLE ALTER ADD DROP PRIMARY KEY'.split(' '));
+const FN=new Set('UPPER NVL TO_CHAR COUNT AVG SYSDATE ROWNUM'.split(' '));
+const TY=new Set('NUMBER VARCHAR2'.split(' '));
+function classify(sql){
+  const cls=new Array(sql.length).fill('pu'),inStr=new Array(sql.length).fill(false);
+  let i=0;
+  while(i<sql.length){
+    const c=sql[i];
+    if(c==="'"){let j=i+1;while(j<sql.length&&sql[j]!=="'")j++;
+      for(let k=i;k<=Math.min(j,sql.length-1);k++){cls[k]='st';inStr[k]=true}
+      i=j+1;continue}
+    if(/[A-Za-z_]/.test(c)){let j=i;while(j<sql.length&&/[A-Za-z0-9_$#]/.test(sql[j]))j++;
+      const w=sql.slice(i,j).toUpperCase();const k=KW.has(w)?'kw':FN.has(w)?'fn':TY.has(w)?'ty':'id';
+      for(let q=i;q<j;q++)cls[q]=k;i=j;continue}
+    if(/[0-9]/.test(c)){let j=i;while(j<sql.length&&/[0-9.]/.test(sql[j]))j++;
+      for(let q=i;q<j;q++)cls[q]='nu';i=j;continue}
+    i++;
+  }
+  return {cls,inStr};
+}
+LEVELS.forEach(L=>{
+  const p=L.sql.split('§');L.given=p[0];L.typ=p[1];L.full=p[0]+p[1];
+  const c=classify(L.full);L.cls=c.cls;L.inStr=c.inStr;
+});
+
+/* ---------- Rangos ---------- */
+const RANKS=[{n:'Aprendiz de tablas',xp:0},{n:'Consultor junior',xp:500},{n:'Analista SQL',xp:1500},{n:'DBA junior',xp:3000},{n:'DBA senior',xp:5000},{n:'Arquitecto de datos',xp:7000}];
+
+/* ---------- Estado ---------- */
+const KEY='tipeasql:v1';
+let progress={};
+try{const raw=localStorage.getItem(KEY);if(raw){const o=JSON.parse(raw);if(o&&typeof o==='object')progress=o}}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(progress))}catch(e){}};
+const S={i:0,typed:'',t0:0,t1:0,errors:0,keys:0,hint:false,done:false,stars:0,tab:'employees',confirmReset:false};
+
+const $=id=>document.getElementById(id);
+const el={rank:$('rank'),side:$('side'),mapbtn:$('mapbtn'),mission:$('mission'),schema:$('schema'),code:$('code'),line:$('line'),cap:$('cap'),pbar:$('pbar'),stats:$('stats'),status:$('status'),bhint:$('bhint'),breset:$('breset'),bnext:$('bnext'),result:$('result'),learn:$('learn')};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const unlocked=i=>i===0||(progress[i-1]||0)>0;
+const xpTotal=()=>Object.keys(progress).reduce((s,k)=>s+100+50*progress[k],0);
+const starTotal=()=>Object.keys(progress).reduce((s,k)=>s+progress[k],0);
+const stars=n=>[1,2,3].map(k=>`<span class="${k<=n?'on':''}">★</span>`).join('');
+
+/* ---------- Render ---------- */
+function renderRank(){
+  const xp=xpTotal();let r=0;RANKS.forEach((x,i)=>{if(xp>=x.xp)r=i});
+  const cur=RANKS[r],nx=RANKS[r+1];
+  const pct=nx?Math.round((xp-cur.xp)/(nx.xp-cur.xp)*100):100;
+  el.rank.innerHTML=`<div class="rank-row"><span class="rank-name">${esc(cur.n)}</span><span class="rank-xp">${xp} XP · ${starTotal()}/${LEVELS.length*3} ★</span></div>
+    <div class="meter"><i style="width:${pct}%"></i></div>
+    <p class="rank-sub">${nx?`Faltan ${nx.xp-xp} XP para ser ${esc(nx.n)}.`:'Rango máximo alcanzado.'}</p>`;
+}
+function renderMap(){
+  let h='';
+  ZONES.forEach((zn,z)=>{
+    const idx=LEVELS.map((L,i)=>i).filter(i=>LEVELS[i].z===z);
+    const done=idx.filter(i=>(progress[i]||0)>0).length;
+    h+=`<section class="zone"><h3><span>Zona ${z+1} · ${esc(zn)}</span><span>${done}/${idx.length}</span></h3><ol>`;
+    idx.forEach(i=>{
+      const L=LEVELS[i],ok=unlocked(i);
+      h+=`<li><button type="button" class="lv${i===S.i?' cur':''}" data-i="${i}"${ok?'':' disabled'} aria-label="Misión ${i+1}: ${esc(L.title)}${ok?'':' (bloqueada)'}">
+        <span class="n">${String(i+1).padStart(2,'0')}</span><span class="t">${esc(L.title)}</span>
+        <span class="s">${ok?stars(progress[i]||0):'—'}</span></button></li>`;
+    });
+    h+='</ol></section>';
+  });
+  h+=`<div class="side-foot"><button type="button" class="linkbtn${S.confirmReset?' warn':''}" id="resetall">${S.confirmReset?'Toca otra vez para borrar todo el progreso':'Reiniciar progreso'}</button></div>`;
+  el.side.innerHTML=h;
+  el.mapbtn.textContent=`Misiones · ${S.i+1} de ${LEVELS.length} · ${LEVELS[S.i].title}`;
+}
+function renderMission(){
+  const L=LEVELS[S.i];
+  el.mission.innerHTML=`<p class="eyebrow">Zona ${L.z+1} · ${esc(ZONES[L.z])} · Misión ${S.i+1} de ${LEVELS.length}</p>
+    <h2>${esc(L.title)}</h2><p class="m">${esc(L.mission)}</p>
+    ${S.hint?`<div class="hint"><b>Pista:</b> ${esc(L.hint)}</div>`:''}`;
+  el.bhint.disabled=S.hint||S.done;
+  el.bhint.textContent=S.hint?'Pista mostrada':'Ver pista';
+}
+function renderSchema(){
+  const t=SCHEMA[S.tab];
+  const cols=t.cols.map(c=>`<span class="col${c[2]?' pk':''}">${esc(c[0])} <em>${esc(c[1])}</em></span>`).join('');
+  const head=t.cols.map(c=>`<th>${esc(c[0].toUpperCase())}</th>`).join('');
+  const body=t.rows.map(r=>'<tr>'+t.cols.map(c=>{
+    let v=r[c[0]];const isN=typeof v==='number';
+    if(v===null)return '<td class="nl">(null)</td>';
+    if(c[1]==='DATE')v=fmtD(v);
+    return `<td${isN?' class="num"':''}>${esc(v)}</td>`;}).join('')+'</tr>').join('');
+  el.schema.innerHTML=`<div class="pad"><p class="eyebrow">Esquema HR · datos de ejemplo</p>
+    <div class="tabs">${Object.keys(SCHEMA).map(k=>`<button type="button" class="tab" data-tab="${k}" aria-pressed="${k===S.tab}">${k.toUpperCase()}</button>`).join('')}</div>
+    <div class="cols">${cols}</div>
+    <div class="gridwrap"><table class="rs"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div></div>`;
+}
+function okAt(L,i,ch){const t=L.full[i];return L.inStr[i]?ch===t:ch.toLowerCase()===t.toLowerCase()}
+function renderLine(){
+  const L=LEVELS[S.i],gl=L.given.length,ty=S.typed;let h='';
+  for(let i=0;i<L.full.length;i++){
+    if(i===gl+ty.length&&!S.done)h+='<span class="caret"></span>';
+    const ch=L.full[i],e=esc(ch);
+    if(i<gl)h+=`<span class="c ${L.cls[i]} gv">${e}</span>`;
+    else{
+      const k=i-gl;
+      if(k<ty.length){
+        if(okAt(L,i,ty[k]))h+=`<span class="c ${L.cls[i]} dn zn">${e}</span>`;
+        else h+=`<span class="c bd zn">${esc(ty[k]===' '?'·':ty[k])}</span>`;
+      }else h+=`<span class="c td zn">${e}</span>`;
+    }
+  }
+  if(!S.done&&ty.length>=L.typ.length)h+='<span class="caret"></span>';
+  el.line.innerHTML=h;
+  el.code.classList.toggle('ok',S.done);
+}
+function firstWrong(L,v){const gl=L.given.length;for(let k=0;k<v.length;k++)if(!okAt(L,gl+k,v[k]))return k;return -1}
+function renderStats(){
+  const L=LEVELS[S.i];
+  const ms=S.t0?((S.done?S.t1:performance.now())-S.t0):0;
+  const ppm=ms>1500?Math.round((S.typed.length/5)/(ms/60000)):null;
+  const acc=S.keys?Math.round((S.keys-S.errors)/S.keys*100):null;
+  el.stats.innerHTML=`<div class="stat"><span>Tiempo</span><b>${(ms/1000).toFixed(1)} s</b></div>
+    <div class="stat"><span>Velocidad</span><b>${ppm===null?'—':ppm+' ppm'}</b></div>
+    <div class="stat"><span>Precisión</span><b>${acc===null?'—':acc+'%'}</b></div>
+    <div class="stat"><span>Errores</span><b>${S.errors}</b></div>`;
+  el.pbar.style.width=Math.min(100,S.typed.length/L.typ.length*100)+'%';
+}
+function renderStatus(){
+  const L=LEVELS[S.i];let cls='',txt;
+  if(S.done){
+    cls='good';
+    txt=`Sentencia ejecutada. ${S.errors===0?'Sin errores':S.errors+(S.errors===1?' error':' errores')} · ${S.stars} de 3 estrellas · +${100+50*S.stars} XP.`;
+    if(S.i===LEVELS.length-1)txt+=' Completaste todas las misiones.';
+  }else if(firstWrong(L,S.typed)>=0){cls='bad';txt='Revisa lo marcado en rojo y corrígelo con Retroceso.'}
+  else txt='Escribe lo que falta de la sentencia. Las mayúsculas y minúsculas no importan, salvo dentro de comillas.';
+  el.status.className='status '+cls;el.status.textContent=txt;
+  const last=S.i===LEVELS.length-1;
+  el.bnext.disabled=!S.done||last;
+  el.bnext.textContent=last?'Fin del recorrido':'Siguiente misión';
+}
+function renderAfter(){
+  const L=LEVELS[S.i];
+  if(!S.done){
+    el.result.innerHTML=`<h3 class="ct"><span>Resultado de la consulta</span></h3><div class="ph">El resultado aparece cuando termines la sentencia.</div>`;
+    el.learn.innerHTML=`<h3 class="ct"><span>Lo que escribiste</span></h3><div class="ph">Aquí verás qué hace cada parte de la sentencia.</div>`;
+    return;
+  }
+  const r=L.res();let body;
+  if(r.msg)body=`<div class="msg">${esc(r.msg)}</div>`;
+  else{
+    const num=r.cols.map((c,j)=>r.rows.length>0&&r.rows.every(row=>row[j]===null||typeof row[j]==='number'));
+    const head=r.cols.map((c,j)=>`<th${num[j]?' class="num"':''}>${esc(c)}</th>`).join('');
+    const rows=r.rows.map(row=>'<tr>'+row.map((v,j)=>v===null?'<td class="nl">(null)</td>':`<td${num[j]?' class="num"':''}>${esc(v)}</td>`).join('')+'</tr>').join('');
+    body=`<div class="gridwrap"><table class="rs"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="rcount">${r.rows.length} ${r.rows.length===1?'fila seleccionada':'filas seleccionadas'}.</p>`;
+  }
+  el.result.innerHTML=`<h3 class="ct"><span>Resultado de la consulta</span></h3>${body}`;
+  el.learn.innerHTML=`<h3 class="ct"><span>Lo que escribiste</span></h3><ul class="learn">${L.learn.map(x=>`<li><code>${esc(x[0])}</code><span>${esc(x[1])}</span></li>`).join('')}</ul>
+    ${L.oracle?`<div class="oracle"><b>En Oracle</b>${esc(L.oracle)}</div>`:''}`;
+}
+function renderAll(){renderRank();renderMap();renderMission();renderSchema();renderLine();renderStats();renderStatus();renderAfter()}
+
+/* ---------- Flujo del juego ---------- */
+function go(i,focus){
+  S.i=i;S.typed='';S.t0=0;S.t1=0;S.errors=0;S.keys=0;S.hint=false;S.done=false;S.stars=0;S.confirmReset=false;
+  el.cap.value='';el.cap.readOnly=false;
+  renderAll();
+  if(focus!==false){try{el.cap.focus({preventScroll:true})}catch(e){}}
+}
+function finish(){
+  S.done=true;S.t1=performance.now();
+  const st=S.errors===0?3:S.errors<=3?2:1;
+  S.stars=S.hint?Math.min(st,2):st;
+  if(S.stars>(progress[S.i]||0)){progress[S.i]=S.stars;save()}
+  el.cap.readOnly=true;
+  renderRank();renderMap();renderMission();renderLine();renderStats();renderStatus();renderAfter();
+}
+function onInput(){
+  if(S.done)return;
+  const L=LEVELS[S.i],gl=L.given.length;
+  let v=el.cap.value.replace(/[\r\n]/g,'');
+  if(v.length>L.typ.length)v=v.slice(0,L.typ.length);
+  const fw=firstWrong(L,v);
+  if(fw>=0&&v.length>fw+5)v=v.slice(0,fw+5);
+  const prev=S.typed;
+  if(v.length>prev.length){
+    if(!S.t0)S.t0=performance.now();
+    for(let k=prev.length;k<v.length;k++){S.keys++;if(!okAt(L,gl+k,v[k]))S.errors++}
+  }
+  S.typed=v;
+  if(el.cap.value!==v)el.cap.value=v;
+  try{el.cap.setSelectionRange(v.length,v.length)}catch(e){}
+  if(v.length===L.typ.length&&firstWrong(L,v)<0){finish();return}
+  renderLine();renderStats();renderStatus();
+}
+el.cap.addEventListener('input',onInput);
+el.cap.addEventListener('paste',e=>e.preventDefault());
+el.cap.addEventListener('drop',e=>e.preventDefault());
+['click','mouseup','focus'].forEach(ev=>el.cap.addEventListener(ev,()=>{try{const n=el.cap.value.length;el.cap.setSelectionRange(n,n)}catch(e){}}));
+el.cap.addEventListener('keydown',e=>{
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key))e.preventDefault();
+  if(e.key==='Enter'&&!S.done)e.preventDefault();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&S.done&&!el.bnext.disabled){
+    const t=e.target;
+    if(t&&t.tagName==='BUTTON'&&t!==el.bnext)return;
+    e.preventDefault();go(S.i+1);
+  }
+});
+el.bnext.addEventListener('click',()=>{if(S.done&&S.i<LEVELS.length-1)go(S.i+1)});
+el.breset.addEventListener('click',()=>go(S.i));
+el.bhint.addEventListener('click',()=>{S.hint=true;renderMission();try{el.cap.focus({preventScroll:true})}catch(e){}});
+el.side.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.id==='resetall'){
+    if(!S.confirmReset){S.confirmReset=true;renderMap();return}
+    progress={};save();go(0);return;
+  }
+  const i=+b.dataset.i;
+  if(!Number.isNaN(i)&&unlocked(i)){go(i);el.side.classList.remove('open');el.mapbtn.setAttribute('aria-expanded','false')}
+});
+el.mapbtn.addEventListener('click',()=>{const o=el.side.classList.toggle('open');el.mapbtn.setAttribute('aria-expanded',String(o))});
+el.schema.addEventListener('click',e=>{
+  const b=e.target.closest('.tab');if(!b)return;
+  S.tab=b.dataset.tab;renderSchema();
+});
+setInterval(()=>{if(S.t0&&!S.done)renderStats()},100);
+
+/* Arranque: primera misión pendiente */
+let start=LEVELS.findIndex((L,i)=>!(progress[i]>0));
+if(start<0)start=LEVELS.length-1;
+go(start,false);
+})();
+</script>
+
+</body>
+</html>
